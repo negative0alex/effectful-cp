@@ -2,7 +2,7 @@
 {-# LANGUAGE TransformListComp #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Queens where
-import MyLib
+import CPEffects
 import Prelude hiding (fail)
 import Data.List (tails)
 import FD.OvertonFD as OvertonFD

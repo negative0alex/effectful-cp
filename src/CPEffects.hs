@@ -11,7 +11,7 @@
 
 
 -- {-# LANGUAGE FlexibleInstances#-}
-module MyLib
+module CPEffects
   ( Solver (..),
     CPModel,
     newVar,
@@ -24,7 +24,7 @@ module MyLib
     (@\==),
     handle,
     exists,
-    MyLib.fail,
+    CPEffects.fail,
     try,
     dbs,
     paraHandle,
