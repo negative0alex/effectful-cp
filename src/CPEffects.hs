@@ -140,9 +140,9 @@ evalEffectful = flip go
           cond <- addCons c
           if cond then k wl else continue wl
         Fail     -> continue
-        Try (_, l) (r, _)  -> \wl -> do
+        Try (l, _) (r, _)  -> \wl -> do
           now <- mark
-          l $ pushQ (now,r) wl
+          continue $ pushQ (now,l) $ pushQ (now,r) wl
         Dynamic d -> \wl -> do
           (_, m) <- d
           m wl
