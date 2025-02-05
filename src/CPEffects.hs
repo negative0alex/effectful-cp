@@ -8,12 +8,12 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 
 -- {-# LANGUAGE FlexibleInstances#-}
 module CPEffects
-  ( Solver (..),
-    CPModel,
+  ( CPModel,
     newVar,
     add,
     exist,
@@ -33,7 +33,6 @@ module CPEffects
     dynamic,
     solveDFS,
     solveBFS,
-    nbs,
     lds,
   )
 where
@@ -44,6 +43,10 @@ import Solver (Solver(..))
 import Prelude hiding (fail)
 import Queues (Queue(..))
 import Data.Sequence (Seq)
+import Control.Monad (join, when)
+import Control.Monad.State (State, MonadState (..), runState, evalState, modify)
+import Control.Lens (Profunctor (dimap))
+import Data.Kind (Type)
 
 
 
@@ -54,6 +57,21 @@ data CPSig solver a where
   Fail    :: CPSig solver a
   Try     :: a -> a -> CPSig solver a
   Dynamic :: solver a -> CPSig solver a
+
+data SearchSig a where
+  Try'  :: a -> a -> SearchSig a
+  Fail' :: SearchSig a
+  deriving Functor
+
+data QueueSig (i :: Type -> Type) (r :: Type) a where
+  Push' :: i r -> ir -> a -> QueueSig i r a
+  Pop'  :: i r -> a -> QueueSig i r a
+  Sol'  :: r -> a -> QueueSig i r a
+
+instance Functor (QueueSig i r) where
+  fmap f (Push' i1 i2 k) = Push' i1 i2 (f k)
+  fmap f (Pop' i r)      = Pop' i (f r)
+  fmap f (Sol' sol rest) = Sol' sol (f rest)
 
 instance Functor solver => Functor (CPSig solver) where
   fmap :: forall a b. (a -> b) -> CPSig solver a -> CPSig solver b
@@ -114,6 +132,8 @@ v1 @\== (v2 :+ n) = do
   add (OAdd t2 v2 n')
   add (ODiff t2 v1)
 
+
+
 addSum :: Term OvertonFD -> Term OvertonFD -> Term OvertonFD -> CPModel OvertonFD ()
 addSum a b c = add (OAdd a b c)
 
@@ -164,21 +184,12 @@ solveBFS :: Solver solver => CPModel solver a -> [a]
 solveBFS = run . evalEffectful (emptyQ::Seq a)
 
 dbs :: Solver solver => Int -> CPModel solver a -> CPModel solver a
-dbs = flip dbs'
+dbs = flip go
   where
-    dbs' :: Solver solver => CPModel solver a -> Int -> CPModel solver a
-    dbs' = handle (\ a _ -> pure a) (\case
+    go :: Solver solver => CPModel solver a -> Int -> CPModel solver a
+    go = handle (\ a _ -> pure a) (\case
       Try l r -> \d -> if d > 0 then try (l (d-1)) (r (d-1)) else fail
       other -> \d -> wrap $ ($ d) <$> other
-      )
-
-nbs :: Solver solver => Int -> CPModel solver a -> CPModel solver a
-nbs = flip nbs'
-  where
-    nbs' :: Solver solver => CPModel solver a -> Int -> CPModel solver a
-    nbs' = handle (\a _ -> pure a) (\case
-        Try l r -> \i -> if i > 0 then try (l (i-1)) (r (i-1)) else fail
-        other -> \i -> wrap $ ($ i) <$> other
       )
 
 lds :: Solver solver => Int -> CPModel solver a -> CPModel solver a
@@ -190,6 +201,132 @@ lds = flip lds'
         other   -> \d -> wrap $ ($ d) <$> other
       )
 
-_fs :: forall solver a . Solver solver => CPModel solver a -> CPModel solver a
-_fs = undefined
 
+evalMini :: forall solver a. (Solver solver) => CPModel solver a -> solver (Free SearchSig a)
+evalMini = handle (pure . pure) (\case
+    NewVar k  -> do
+      v <- newvar
+      k v
+    Add c k   -> do
+      success <- addCons c
+      if success then k else pure $ Free Fail'
+    Dynamic k -> join k
+    Fail      -> pure $ Free Fail'
+    Try l r   -> do
+      now <- mark
+      l' <- l
+      goto now
+      r' <- r
+      goto now
+      pure $ Free $ Try' l' r'
+  )
+
+solveMiniQ :: forall q a. (Queue q, Elem q~ Free SearchSig a) => q -> Free SearchSig a -> [a]
+solveMiniQ = flip go
+  where
+    go :: Free SearchSig a -> q -> [a]
+    go (Pure x) q          = x : continue q
+    go (Free (Try' l r)) q = continue $ pushQ l $ pushQ r q
+    go (Free Fail') q      = continue q
+    continue wl
+      | nullQ wl  = []
+      | otherwise =
+        let (t, wl') = popQ wl
+        in go t wl'
+
+solvePartialQ :: forall q a.(Queue q, Elem q~ Free SearchSig a) =>
+  q -> Free SearchSig a -> Free (QueueSig (Free SearchSig) a) ()
+solvePartialQ = flip go
+  where
+    go :: Free SearchSig a -> q -> Free (QueueSig (Free SearchSig) a) ()
+    go (Pure x) wl = Free $ Sol' x (continue wl)
+    go (Free t) wl = case t of
+      Try' l r -> Free $ Push' l r (continue $ pushQ l $ pushQ r wl)
+      Fail'    -> continue wl
+    continue :: q -> Free (QueueSig (Free SearchSig) a) ()
+    continue wl
+      | nullQ wl = pure ()
+      | otherwise =
+        let (t, wl') = popQ wl
+        in Free $ Pop' t (go t wl')
+
+allsols :: Free (QueueSig _i a) () -> [a]
+allsols = handle (const []) (\case
+    Sol' s k    -> s:k
+    Pop' _ k    -> k
+    Push' _ _ k -> k
+  )
+
+firstsol :: Free (QueueSig _i a) () -> a
+firstsol = head . allsols
+
+nbs :: Int -> Free (QueueSig _i a) () -> Free (QueueSig _i a) ()
+nbs budget (Pure ()) = Pure ()
+nbs budget (Free t)  = case t of
+  Sol' s k -> Free $ Sol' s $ nbs budget k
+  Pop' n k -> Free $ Pop' n $ nbs budget k
+  Push' i1 i2 k -> when (budget > 0) $ Free $ Push' i1 i2 $ nbs (budget - 1) k
+solveDFS' model = run $ solveMiniQ [] <$> evalMini model
+
+solveBFS' model = run $ solveMiniQ (emptyQ::Seq a) <$> evalMini model
+
+dbs' :: Int -> Free SearchSig a -> Free SearchSig a
+dbs' = flip go
+  where
+    go :: Free SearchSig a -> Int -> Free SearchSig a
+    go = handle (\a _ -> pure a) (\case
+        Try' l r -> \d -> if d > 0 then Free $ Try' (l (d-1)) (r (d-1)) else Free Fail'
+        other -> \d -> Free $ ($ d) <$> other
+      )
+
+-- This doesn't work 
+fs :: Free SearchSig a -> Free SearchSig a
+fs model = evalState (go model) False
+  where
+    go :: Free SearchSig a -> State Bool (Free SearchSig a)
+    go (Pure x) = do
+      put True
+      pure $ pure x
+    go (Free t) = case t of
+      Try' l r -> do
+        alreadyFound <- get
+        if alreadyFound then pure $ Free Fail' else do
+          l' <- go l
+          r' <- go r
+          pure $ Free $ Try' l' r'
+      Fail'    -> pure $ Free Fail'
+
+
+simpleFs :: forall q a. (Queue q, Elem q~ Free SearchSig a) => q -> Free SearchSig a -> [a]
+simpleFs qInit model = evalState (go model qInit) False
+  where
+    go :: Free SearchSig a -> q -> State Bool [a]
+    go (Pure x) q          = do
+      put True
+      (x:) <$> continue q
+    go (Free (Try' l r)) q = continue $ pushQ l $ pushQ r q
+    go (Free Fail') q      = continue q
+    continue :: q -> State Bool [a]
+    continue wl
+      | nullQ wl  = pure []
+      | otherwise = do
+        alreadySols <- get
+        if alreadySols then pure [] else
+          let (t, wl') = popQ wl
+          in go t wl'
+
+solveQueensCount :: Free SearchSig [Int] -> ([[Int]], Int)
+solveQueensCount model = runState (go model) 0
+  where
+    go :: Free SearchSig [Int] -> State Int [[Int]]
+    go = handle (\a -> do
+      highest <- get
+      let h = head a
+      when (h > highest) $ put h
+      if h > highest then pure [a] else pure []) (\case
+        Fail' -> pure []
+        Try' l r -> do
+          l' <- l
+          r' <- r
+          pure $ l' <> r'
+      )

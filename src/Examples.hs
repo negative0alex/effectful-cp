@@ -1,13 +1,14 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# LANGUAGE TransformListComp #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
-module Queens where
+module Examples where
 import CPEffects
 import Prelude hiding (fail)
 import Data.List (tails)
 import FD.OvertonFD as OvertonFD
 import FD.Domain as Domain
 import GHC.Exts (sortWith)
+import Solver (Solver)
 
 
 nqueens n = exist n $ \queens -> model queens n /\ enumerate queens /\ assignments queens

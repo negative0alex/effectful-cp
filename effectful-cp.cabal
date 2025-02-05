@@ -60,10 +60,12 @@ library
     -- Modules exported by the library.
     exposed-modules:  CPEffects
                     , Solver
-                    , Queens
-                    , SplitCPEffects
-                    , NonDet 
-                    , CPSolve
+                    , Examples
+                    -- , SplitCPEffects
+                    -- , NonDet 
+                    -- , CPSolve
+                    -- , Handlers
+                    -- , Queens2
 
     -- Modules included in this library but not exported.
     other-modules:  FD.OvertonFD 

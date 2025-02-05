@@ -4,9 +4,10 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
-module NonDet where 
+module NonDet (fail, pattern (:|:), try, NonDet, pattern Fail) where 
 import Control.Monad.Free (Free(..))
 import SplitCPEffects(Sub, project, inject)
+import Prelude hiding (fail)
   
 data NonDet a where
   Try'  :: a -> a -> NonDet a
@@ -20,5 +21,5 @@ fail = inject Fail'
 
 pattern (:|:) :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a
 pattern p :|: q <- (project -> Just (Try' p q))
-(|||) :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a 
-p ||| q = inject (Try' p q)
+try :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a 
+try p q = inject (Try' p q)
