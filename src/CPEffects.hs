@@ -44,8 +44,7 @@ import Prelude hiding (fail)
 import Queues (Queue(..))
 import Data.Sequence (Seq)
 import Control.Monad (join, when)
-import Control.Monad.State (State, MonadState (..), runState, evalState, modify)
-import Control.Lens (Profunctor (dimap))
+import Control.Monad.State (State, MonadState (..), runState, evalState)
 import Data.Kind (Type)
 
 
@@ -202,7 +201,7 @@ lds = flip lds'
       )
 
 
-evalMini :: forall solver a. (Solver solver) => CPModel solver a -> solver (Free SearchSig a)
+evalMini :: (Solver solver) => CPModel solver a -> solver (Free SearchSig a)
 evalMini = handle (pure . pure) (\case
     NewVar k  -> do
       v <- newvar
@@ -266,6 +265,8 @@ nbs budget (Free t)  = case t of
   Sol' s k -> Free $ Sol' s $ nbs budget k
   Pop' n k -> Free $ Pop' n $ nbs budget k
   Push' i1 i2 k -> when (budget > 0) $ Free $ Push' i1 i2 $ nbs (budget - 1) k
+
+  
 solveDFS' model = run $ solveMiniQ [] <$> evalMini model
 
 solveBFS' model = run $ solveMiniQ (emptyQ::Seq a) <$> evalMini model
@@ -330,3 +331,4 @@ solveQueensCount model = runState (go model) 0
           r' <- r
           pure $ l' <> r'
       )
+

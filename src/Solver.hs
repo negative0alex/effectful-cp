@@ -1,13 +1,13 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Solver (Solver(..), SolverEffect(..)) where
-import Data.Kind (Type)
+module Solver (Solver(..)) where
 
+-- type family Constraint solver = r | r -> solver 
 
 class (Monad solver) => Solver solver where
-  type Constraint solver :: Type
-  type Term solver :: Type
-  type Label solver :: Type
+  type Constraint solver = r | r -> solver
+  type Term solver = r | r -> solver
+  type Label solver = r | r -> solver
 
   newvar :: solver (Term solver)
   addCons :: Constraint solver -> solver Bool
@@ -15,10 +15,4 @@ class (Monad solver) => Solver solver where
   mark :: solver (Label solver)
   goto :: Label solver -> solver ()
 
-class (Functor sig, Solver(Solv sig)) => SolverEffect sig where
-  type Solv sig :: (Type -> Type)
-
-  newVar'  :: (Term (Solv sig) -> a) -> sig a
-  addCons' :: Constraint (Solv sig) -> a -> sig a
-  dynamic' :: Solv sig a -> sig a
 

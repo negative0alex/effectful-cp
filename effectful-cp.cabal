@@ -61,11 +61,11 @@ library
     exposed-modules:  CPEffects
                     , Solver
                     , Examples
-                    -- , SplitCPEffects
-                    -- , NonDet 
-                    -- , CPSolve
-                    -- , Handlers
-                    -- , Queens2
+                    , SplitCPEffects
+                    , NonDet 
+                    , CPSolve
+                    , Handlers
+                    , Queens2
 
     -- Modules included in this library but not exported.
     other-modules:  FD.OvertonFD 
@@ -77,7 +77,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.1
+    build-depends:    base >=4.17.2.1
                     , free 
                     , containers
                     , transformers
@@ -105,7 +105,7 @@ executable effectful-cp
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.17.2.1,
+        base >=4.17.2.1,
         effectful-cp
 
     -- Directories containing source files.
@@ -138,5 +138,5 @@ test-suite effectful-cp-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.17.2.1,
+        base >=4.17.2.1,
         effectful-cp

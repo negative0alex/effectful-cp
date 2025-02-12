@@ -4,7 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
-module NonDet (fail, pattern (:|:), try, NonDet, pattern Fail) where 
+module NonDet (fail, pattern (:|:), try, NonDet(..), pattern Fail) where 
 import Control.Monad.Free (Free(..))
 import SplitCPEffects(Sub, project, inject)
 import Prelude hiding (fail)

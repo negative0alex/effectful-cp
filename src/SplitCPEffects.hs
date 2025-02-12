@@ -7,13 +7,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
-module SplitCPEffects (inject, project, SplitCPEffects.run, pattern Other, Sub(..), (:+:)(..), Void)
+module SplitCPEffects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe)
 where
 import Control.Monad.Free (Free(..))
 
 
 data (sig1 :+: sig2) cnt = Inl (sig1 cnt) | Inr (sig2 cnt)
 infixr 7 :+:
+
 
 instance (Functor sig1, Functor sig2) => Functor (sig1 :+: sig2) where
   fmap f (Inl s1) = Inl (fmap f s1)
@@ -47,11 +48,22 @@ project :: (sub `Sub` sup) => Free sup a -> Maybe (sub (Free sup a))
 project (Free s) = prj s
 project _ = Nothing
 
+getL :: Free (sig1 :+: sig2) a -> Maybe(sig1 (Free (sig1 :+: sig2) a))
+getL (Free (Inl a)) = Just a 
+getL _ = Nothing
+
+putL :: sig1 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
+putL = Free . Inl
+
+getRUnsafe :: (sig1 :+: sig2) a -> sig2 a 
+getRUnsafe (Inr a) = a 
+
+
 data Void cnt deriving Functor
 
-run :: Free Void a -> a
-run (Pure x) = x
-run _ = error "impossible???"
+runEffects :: Free Void a -> a
+runEffects (Pure x) = x
+runEffects _ = error "impossible???"
 
 pattern Other :: sig2 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
 pattern Other s = Free (Inr s)
