@@ -332,3 +332,4 @@ solveQueensCount model = runState (go model) 0
           pure $ l' <> r'
       )
 
+

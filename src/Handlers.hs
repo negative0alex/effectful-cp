@@ -9,14 +9,15 @@
 
 module Handlers where
 import NonDet (NonDet (..), pattern Fail, pattern (:|:), fail, try)
-import SplitCPEffects (Sub (..), (:+:) (..), pattern Other, Void, runEffects, inject, getRUnsafe)
-import Control.Monad.Free (Free (..), hoistFree)
+import SplitCPEffects (Sub (..), (:+:) (..), pattern Other, Void, runEffects, getRUnsafe)
+import Control.Monad.Free (Free (..))
 import Control.Monad (liftM2)
 import Prelude hiding (fail)
 import Solver (Solver (..))
 import CPSolve (CPSolve, pattern NewVar, pattern Add, pattern Dynamic)
 import Queues (QueueE, pop, push, Queue (..), pattern Push, pattern Pop)
 import Data.Sequence (Seq)
+import Transformer (TransformerE, leftT, rightT, nextT, pattern LeftT, pattern RightT, pattern NextT)
 
 naiveAllSols :: Functor sig => Free (NonDet :+: sig) a -> Free sig [a]
 naiveAllSols (Pure a)   = pure [a]
@@ -86,6 +87,59 @@ traverseQueue = go
         let (t, wl') = popQ wl
         in go wl' (queueify t) 
 
+solveNaive :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 solveNaive model = run $ runEffects . naiveAllSols <$> eval model
+solveDFS :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 solveDFS model = run $ runEffects . traverseQueue [] . queueify <$> eval model
+solveBFS :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 solveBFS model = run $ runEffects . traverseQueue (emptyQ :: Seq a) . queueify <$> eval model
+
+
+traverseQ :: forall sig a q ts es. (Queue q, Elem q~ (ts, Free (NonDet :+: sig) a), Functor sig) =>
+  q -> Free (NonDet :+: sig) a -> ts -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
+traverseQ  = go
+  where 
+  go :: q -> Free (NonDet :+: sig) a -> ts -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
+  go q (Pure a) _ es    = (a:) <$> continue q es
+  go q (l :|: r) ts es = leftT ts (\ls -> rightT ts (\rs -> 
+    let q' = pushQ (ls, l) $ pushQ (rs, r) $ q in 
+    continue q' es
+    ))
+  go q (Fail) _ es    = continue q es
+  continue :: q -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
+  continue q es 
+    | nullQ q   = pure []
+    | otherwise = do
+      let ((ts, tree), q') = popQ q 
+      nextT tree ts es (\tree' ts' es' -> traverseQ q' tree' ts' es')
+
+
+dbs' :: forall a. 
+  Int -> Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
+    Free (Void) [a]
+dbs' depth_limit = go 
+  where 
+    go :: Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
+      Free (Void) [a]
+    go (LeftT ts k)  = go $ k (ts+1)
+    go (RightT ts k) = go (leftT ts k)
+    go (NextT x ts _ k) = if ts <= depth_limit then go $ k x ts () else go $ k fail ts ()
+    go (Pure a) = pure a
+
+nbs :: forall a. 
+  Int -> Free (TransformerE () Int (Free (NonDet :+: Void) a) :+: Void) [a] -> Free Void [a]
+nbs node_limit = go 
+  where 
+    go :: Free (TransformerE () Int (Free (NonDet :+: Void) a) :+: Void) [a] -> Free Void [a]
+    go (LeftT  _ k) = go $ k ()
+    go (RightT _ k) = go $ k ()
+    go (NextT x _ es k) = if es <= node_limit then go $ k x () (es + 1) else go $ k fail () es 
+    go (Pure a) = pure a 
+
+it :: (Functor sig) => Free (TransformerE () () (Free (NonDet :+: Void) a) :+: sig) [a] -> Free Void [a] 
+it (LeftT _ k)  = it $ k ()
+it (RightT _ k) = it (k ())
+it (NextT x _ _ k) = it $ k x () ()
+it (Pure a) = pure a
+
+solve model = run $ runEffects . it . (\m -> traverseQ [] m () ()) <$> eval model

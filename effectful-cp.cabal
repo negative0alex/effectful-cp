@@ -58,14 +58,15 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  CPEffects
+    exposed-modules:  Handlers
+                    , CPEffects
                     , Solver
                     , Examples
                     , SplitCPEffects
                     , NonDet 
                     , CPSolve
-                    , Handlers
                     , Queens2
+                    , Transformer
 
     -- Modules included in this library but not exported.
     other-modules:  FD.OvertonFD 

@@ -78,6 +78,8 @@ pattern Pop <- (getL -> Just Pop')
 
 pop :: (Functor sig) => Free (QueueE item :+: sig) a 
 pop = putL Pop'
+-- pop :: forall item sig a. (QueueE item `Sub` sig) => Free (sig) a
+-- pop = inject (Pop':: QueueE item (Free sig a))
 
 
 

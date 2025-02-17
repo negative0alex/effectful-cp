@@ -23,3 +23,4 @@ pattern (:|:) :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a
 pattern p :|: q <- (project -> Just (Try' p q))
 try :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a 
 try p q = inject (Try' p q)
+
