@@ -96,8 +96,8 @@ solveBFS model = run $ runEffects . traverseQueue (emptyQ :: Seq a) . queueify <
 
 
 traverseQ :: forall sig a q ts es. (Queue q, Elem q~ (ts, Free (NonDet :+: sig) a), Functor sig) =>
-  q -> Free (NonDet :+: sig) a -> ts -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
-traverseQ  = go
+  q -> Free (NonDet :+: sig) a -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
+traverseQ  queue model = initT (\tsInit esInit -> go queue model tsInit esInit)
   where 
   go :: q -> Free (NonDet :+: sig) a -> ts -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
   go q (Pure a) _ es    = (a:) <$> continue q es
@@ -111,7 +111,7 @@ traverseQ  = go
     | nullQ q   = pure []
     | otherwise = do
       let ((ts, tree), q') = popQ q 
-      nextT tree ts es (\tree' ts' es' -> traverseQ q' tree' ts' es')
+      nextT tree ts es (\tree' ts' es' -> go q' tree' ts' es')
 
 
 dbs' :: forall a. 
@@ -121,6 +121,7 @@ dbs' depth_limit = go
   where 
     go :: Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
       Free (Void) [a]
+    go (InitT k)     = go $ k 0 ()
     go (LeftT ts k)  = go $ k (ts+1)
     go (RightT ts k) = go (leftT ts k)
     go (NextT x ts _ k) = if ts <= depth_limit then go $ k x ts () else go $ k fail ts ()
@@ -131,39 +132,23 @@ nbs :: forall a.
 nbs node_limit = go 
   where 
     go :: Free (TransformerE () Int (Free (NonDet :+: Void) a) :+: Void) [a] -> Free Void [a]
+    go (InitT k)    = go $ k () 0
     go (LeftT  _ k) = go $ k ()
     go (RightT _ k) = go $ k ()
     go (NextT x _ es k) = if es <= node_limit then go $ k x () (es + 1) else go $ k fail () es 
     go (Pure a) = pure a 
 
 
-dbs_comp_bad :: forall a ts_other es_other. 
-  Int -> ts_other -> es_other -> Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
-    Free (TransformerE ts_other es_other (Free (NonDet :+: Void) a) :+: Void) [a]
-dbs_comp_bad depth_limit = go 
-  where 
-    go :: ts_other -> es_other -> Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
-      Free (TransformerE ts_other es_other (Free (NonDet :+: Void) a) :+: Void) [a]
-
-    go ts_other es_other (LeftT ts k) = leftT ts_other (\ts_other' -> go ts_other' es_other (k (ts+1))) 
-
-    go ts_other es_other (RightT ts k) = go ts_other es_other (leftT ts k)
-
-    go ts_other es_other (NextT x ts _ k) = if ts <= depth_limit then
-      nextT x ts_other es_other (\x' ts_other' es_other' -> go ts_other' es_other' $ k x' ts ()) else
-        nextT fail ts_other es_other (\x' ts_other' es_other' -> go ts_other' es_other' $ k x' ts ())
-
-    go _ _ (Pure a) = pure a
-
 it :: (Functor sig) => Free (TransformerE () () (Free (NonDet :+: Void) a) :+: sig) [a] -> Free Void [a] 
+it (InitT k)    = it $ k () ()
 it (LeftT _ k)  = it $ k ()
 it (RightT _ k) = it (k ())
 it (NextT x _ _ k) = it $ k x () ()
 it (Pure a) = pure a
 
-solve model = run $ runEffects . it . (\m -> traverseQ [] m () ()) <$> eval model
+solve model = run $ runEffects . it . (\m -> traverseQ [] m) <$> eval model
 
-dbs_once depth model = run $ runEffects . (dbs' depth) . (\m -> traverseQ [] m 0 ()) <$> eval model
+dbs_once depth model = run $ runEffects . (dbs' depth) . (\m -> traverseQ [] m) <$> eval model
 
 dbs_comp :: forall a tsRest esRest. 
   Int  -> Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
@@ -172,6 +157,7 @@ dbs_comp depthLimit = go
   where 
     go :: Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
       Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
+    go (InitT k) = initT (\tsRest esRest -> go $ k (0, tsRest) ((), esRest))
     go (LeftT  (depth, tsRest) k) = leftT  tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
     go (RightT (depth, tsRest) k) = rightT tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
     go (NextT tree (depth, tsRest) (_, esRest) k) = nextT tree tsRest esRest (\tree' tsRest' esRest' -> 
@@ -180,4 +166,4 @@ dbs_comp depthLimit = go
 
 test_dbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 test_dbs depthOuter depthInner model = run $ runEffects . it . (dbs_comp depthOuter) . (dbs_comp depthInner) .
-  (\m -> traverseQ [] m (0,(0,())) ((), ((), ()))) <$> eval model
+  (traverseQ []) <$> eval model
