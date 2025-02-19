@@ -17,7 +17,7 @@ import Solver (Solver (..))
 import CPSolve (CPSolve, pattern NewVar, pattern Add, pattern Dynamic)
 import Queues (QueueE, pop, push, Queue (..), pattern Push, pattern Pop)
 import Data.Sequence (Seq)
-import Transformer (TransformerE, leftT, rightT, nextT, pattern LeftT, pattern RightT, pattern NextT)
+import Transformer (TransformerE, leftT, rightT, nextT, initT, pattern LeftT, pattern RightT, pattern NextT, pattern InitT)
 
 naiveAllSols :: Functor sig => Free (NonDet :+: sig) a -> Free sig [a]
 naiveAllSols (Pure a)   = pure [a]
@@ -165,3 +165,19 @@ solve model = run $ runEffects . it . (\m -> traverseQ [] m () ()) <$> eval mode
 
 dbs_once depth model = run $ runEffects . (dbs' depth) . (\m -> traverseQ [] m 0 ()) <$> eval model
 
+dbs_comp :: forall a tsRest esRest. 
+  Int  -> Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
+    Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
+dbs_comp depthLimit = go 
+  where 
+    go :: Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
+      Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
+    go (LeftT  (depth, tsRest) k) = leftT  tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
+    go (RightT (depth, tsRest) k) = rightT tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
+    go (NextT tree (depth, tsRest) (_, esRest) k) = nextT tree tsRest esRest (\tree' tsRest' esRest' -> 
+      if depth <= depthLimit then go $ k tree' (depth, tsRest') ((), esRest') else go $ k fail (depth, tsRest') ((), esRest'))
+    go (Pure a) = pure a
+
+test_dbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+test_dbs depthOuter depthInner model = run $ runEffects . it . (dbs_comp depthOuter) . (dbs_comp depthInner) .
+  (\m -> traverseQ [] m (0,(0,())) ((), ((), ()))) <$> eval model
