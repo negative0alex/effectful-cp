@@ -12,12 +12,10 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-module Queues (Queue(..), QueueE, push, pop, pattern Pop, pattern Push) where 
+module Queues (Queue(..)) where 
 import Data.Kind (Type)
 import qualified Data.Sequence
 import Data.Sequence (Seq, empty)
-import SplitCPEffects (project, Sub, inject, (:+:), getL, putL)
-import Control.Monad.Free (Free)
 
 class Queue q where 
   type Elem q :: Type
@@ -52,38 +50,3 @@ instance Queue (Seq a) where
   pushQ :: Elem (Seq a) -> Seq a -> Seq a
   pushQ = flip (Data.Sequence.|>)
 
-data QueueE item a where
-  Push' :: item -> a -> QueueE item a
-  -- Pop'  :: (item -> a) -> QueueE item a
-  Pop' :: QueueE item a
-  deriving Functor
-
--- class (Functor qe) => QueueEffect qe where 
---   data Item qe
-
---   push :: (qe `Sub` sig) => Item qe -> Free sig a -> Free sig a 
---   pop  :: (Functor sig) => Free (qe :+: sig) a
-
--- instance QueueEffect (QueueE item) where 
---   data Item (QueueE item) = It item 
-
-pattern Push :: (QueueE item `Sub` sig) => item -> Free sig a -> Free sig a
-pattern Push i k <- (project -> Just (Push' i k))
-
-push :: (QueueE item `Sub` sig) => item -> Free sig a -> Free sig a 
-push i = inject . Push' i
-
-pattern Pop :: (Functor sig) => Free (QueueE item :+: sig) a 
-pattern Pop <- (getL -> Just Pop')
-
-pop :: (Functor sig) => Free (QueueE item :+: sig) a 
-pop = putL Pop'
--- pop :: forall item sig a. (QueueE item `Sub` sig) => Free (sig) a
--- pop = inject (Pop':: QueueE item (Free sig a))
-
-
-
--- pattern Pop <- ((project::Free sig a -> Maybe (QueueE item (Free sig a))) -> Just Pop')
-
--- pop :: forall item sig a. (QueueE item `Sub` sig) => Free sig a 
--- pop = (inject :: QueueE item (Free sig a) -> Free sig a) (Pop' :: QueueE item (Free sig a)) 

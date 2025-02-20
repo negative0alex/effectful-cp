@@ -25,9 +25,13 @@ class (Functor sub, Functor sup) => sub `Sub` sup where
   inj  :: sub a -> sup a
   prj :: sup a -> Maybe (sub a)
 
+
+
+
 instance Functor sig => sig `Sub` sig where
   inj = id
   prj = Just
+
 
 instance  {-# OVERLAPS #-}
   (Functor sig1, Functor sig2) => sig1 `Sub` (sig1 :+: sig2) where
@@ -35,11 +39,19 @@ instance  {-# OVERLAPS #-}
   prj (Inl fa) = Just fa
   prj _        = Nothing
 
+instance {-# INCOHERENT #-}
+  (Functor (f a), Functor sig2, a ~ b) => f b `Sub` (f a :+: sig2) where 
+    inj = Inl 
+    prj (Inl fa) = Just fa
+    prj _ = Nothing
+
+
 instance {-# OVERLAPPABLE #-}
   (Functor sig1, sig `Sub` sig2) => sig `Sub` (sig1 :+: sig2) where
   inj          = Inr . inj
   prj (Inr ga) = prj ga
   prj _        = Nothing
+
 
 inject :: (sub `Sub` sup) => sub (Free sup a) -> Free sup a
 inject = Free . inj

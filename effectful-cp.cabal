@@ -59,9 +59,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  Handlers
-                    , CPEffects
                     , Solver
-                    , Examples
                     , SplitCPEffects
                     , NonDet 
                     , CPSolve

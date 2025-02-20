@@ -49,6 +49,9 @@ pattern LeftT :: forall ts es sig cnt el. (Functor sig) =>
   ts -> (ts -> Free (TransformerE ts es el :+: sig) cnt) -> Free (TransformerE ts es el :+: sig)  cnt 
 pattern LeftT ts k <- (getL -> Just (LeftT' ts k))
 
+-- pattern LeftT :: (TransformerE ts es al `Sub` sig) => ts -> (ts -> Free sig cnt) -> Free sig cnt 
+-- pattern LeftT ts k <- (project -> Just (LeftT' ts k))
+
 leftT :: forall ts es sig cnt el. (Functor sig) =>
   ts -> (ts -> Free (TransformerE ts es el :+: sig) cnt) -> Free (TransformerE ts es el :+: sig) cnt 
 leftT ts k = putL (LeftT' ts k)

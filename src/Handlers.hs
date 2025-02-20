@@ -9,21 +9,14 @@
 
 module Handlers where
 import NonDet (NonDet (..), pattern Fail, pattern (:|:), fail, try)
-import SplitCPEffects (Sub (..), (:+:) (..), pattern Other, Void, runEffects, getRUnsafe)
+import SplitCPEffects (Sub (..), (:+:) (..), pattern Other, Void, runEffects)
 import Control.Monad.Free (Free (..))
-import Control.Monad (liftM2)
 import Prelude hiding (fail)
 import Solver (Solver (..))
 import CPSolve (CPSolve, pattern NewVar, pattern Add, pattern Dynamic)
-import Queues (QueueE, pop, push, Queue (..), pattern Push, pattern Pop)
-import Data.Sequence (Seq)
+import Queues (Queue (..))
 import Transformer (TransformerE, leftT, rightT, nextT, initT, pattern LeftT, pattern RightT, pattern NextT, pattern InitT)
 
-naiveAllSols :: Functor sig => Free (NonDet :+: sig) a -> Free sig [a]
-naiveAllSols (Pure a)   = pure [a]
-naiveAllSols Fail       = pure []
-naiveAllSols (a :|: b)  = liftM2 (<>) (naiveAllSols a) (naiveAllSols b)
-naiveAllSols (Other op) = Free (fmap naiveAllSols op)
 
 
 knapsack :: Int -> [Int] -> Free (NonDet :+: Void) [Int]
@@ -38,8 +31,8 @@ knapsack w vs
     select = foldr (try . pure) fail
 
 
-eval :: forall solver a. (Solver solver) =>
-  Free (CPSolve solver :+: NonDet :+: Void) a -> solver (Free (NonDet :+: Void) a)
+eval :: forall solver a sig. (Solver solver, NonDet `Sub` sig) =>
+  Free (CPSolve solver :+: sig) a -> solver (Free sig a)
 eval (Pure a)    = pure . pure $ a
 eval (NewVar k)  = do
   v <- newvar 
@@ -56,43 +49,6 @@ eval (l :|: r)   = do
   goto now 
   pure $ try l' r'
 eval (Fail)      = pure fail
-
-dbs :: forall sig a. (NonDet `Sub` sig) => Int -> Free sig a -> Free sig a 
-dbs depthBudget (l :|: r) = if depthBudget > 0 then try (dbs (depthBudget - 1) l) (dbs (depthBudget - 1) r) else fail 
-dbs _ (Pure x) = pure x 
-dbs depthBudget (Free op) = Free $ dbs depthBudget <$> op
-
-
-
-queueify :: forall sig a. (Functor sig) =>
-  Free (NonDet :+: sig) a -> Free (QueueE (Free (NonDet :+: sig) a) :+: sig) a 
-queueify (Fail) = pop 
-queueify (l :|: r) = push r $ push l $ pop 
-queueify (Pure x) = pure x 
--- queueify (Free op) = Free . Inr $ queueify <$> op
-queueify (Free op) = Free . Inr $ queueify <$> getRUnsafe op
-
-traverseQueue :: forall sig a q. (Queue q, Elem q~ (Free (NonDet :+: sig) a), Functor sig) =>
-  q -> Free (QueueE (Free (NonDet :+: sig) a) :+: sig) a -> Free sig [a]
-traverseQueue = go 
-  where 
-    go :: q -> Free (QueueE (Free (NonDet :+: sig) a) :+: sig) a -> Free sig [a]
-    go wl (Pure x) = (x:) <$> continue wl 
-    go wl (Pop)  = continue wl 
-    go wl (Push i k) = go (pushQ i wl) k 
-    continue :: q  -> Free sig [a]
-    continue wl
-      | nullQ wl  = pure []
-      | otherwise =
-        let (t, wl') = popQ wl
-        in go wl' (queueify t) 
-
-solveNaive :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
-solveNaive model = run $ runEffects . naiveAllSols <$> eval model
-solveDFS :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
-solveDFS model = run $ runEffects . traverseQueue [] . queueify <$> eval model
-solveBFS :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
-solveBFS model = run $ runEffects . traverseQueue (emptyQ :: Seq a) . queueify <$> eval model
 
 
 traverseQ :: forall sig a q ts es. (Queue q, Elem q~ (ts, Free (NonDet :+: sig) a), Functor sig) =>
@@ -114,29 +70,32 @@ traverseQ  queue model = initT (\tsInit esInit -> go queue model tsInit esInit)
       nextT tree ts es (\tree' ts' es' -> go q' tree' ts' es')
 
 
-dbs' :: forall a. 
-  Int -> Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
-    Free (Void) [a]
-dbs' depth_limit = go 
-  where 
-    go :: Free (TransformerE Int () (Free (NonDet :+: Void) a) :+: Void) [a] ->
-      Free (Void) [a]
-    go (InitT k)     = go $ k 0 ()
-    go (LeftT ts k)  = go $ k (ts+1)
-    go (RightT ts k) = go (leftT ts k)
-    go (NextT x ts _ k) = if ts <= depth_limit then go $ k x ts () else go $ k fail ts ()
-    go (Pure as) = pure as
+extract :: Free f a -> a
+extract (Pure a) = a
 
-nbs :: forall a. 
-  Int -> Free (TransformerE () Int (Free (NonDet :+: Void) a) :+: Void) [a] -> Free Void [a]
-nbs node_limit = go 
+solve :: forall solver q a sig ts es. 
+  (Solver solver, Queue q, Elem q~ (ts, Free (NonDet :+: sig) a, Label solver), Functor sig) =>
+  q -> Free (CPSolve solver :+: NonDet :+: sig) a ->
+    solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
+solve queue model = pure (initT @ts @es @sig (\ts es -> pure (ts, es))) >>= (\tses -> 
+  let (ts, es) = extract tses in go queue model ts es)
   where 
-    go :: Free (TransformerE () Int (Free (NonDet :+: Void) a) :+: Void) [a] -> Free Void [a]
-    go (InitT k)    = go $ k () 0
-    go (LeftT  _ k) = go $ k ()
-    go (RightT _ k) = go $ k ()
-    go (NextT x _ es k) = if es <= node_limit then go $ k x () (es + 1) else go $ k fail () es 
-    go (Pure a) = pure a 
+    go :: q -> Free (CPSolve solver :+: NonDet :+: sig) a -> ts -> es ->
+      solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
+    go q (Pure a) _ es = ((a:) <$>) <$> (continue q es)
+    go q (NewVar k) ts es = do 
+      v <- newvar 
+      go q (k v) ts es
+    go q (Dynamic d) ts es = d >>= (\t -> go q t ts es)
+    go q (Add c k) ts es = do 
+      successful <- addCons c 
+      if successful then go q k ts es else go q fail ts es 
+    go q (Fail) _ es = continue q es 
+    go q (l :|: r) ts es = do 
+      now <- mark 
+      undefined
+    continue :: q -> es -> solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
+    continue = undefined
 
 
 it :: (Functor sig) => Free (TransformerE () () (Free (NonDet :+: Void) a) :+: sig) [a] -> Free Void [a] 
@@ -146,17 +105,14 @@ it (RightT _ k) = it (k ())
 it (NextT x _ _ k) = it $ k x () ()
 it (Pure a) = pure a
 
-solve model = run $ runEffects . it . (\m -> traverseQ [] m) <$> eval model
-
-dbs_once depth model = run $ runEffects . (dbs' depth) . (\m -> traverseQ [] m) <$> eval model
-
-dbs_comp :: forall a tsRest esRest. 
-  Int  -> Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
+type CTransformer ts es = forall a tsRest esRest. 
+  Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
     Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
+
+dbs_comp :: Int -> CTransformer Int ()
 dbs_comp depthLimit = go 
   where 
-    go :: Free (TransformerE (Int, tsRest) ((), esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
-      Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
+    go :: CTransformer Int ()
     go (InitT k) = initT (\tsRest esRest -> go $ k (0, tsRest) ((), esRest))
     go (LeftT  (depth, tsRest) k) = leftT  tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
     go (RightT (depth, tsRest) k) = rightT tsRest (\tsRest' -> go $ k (depth+1, tsRest'))
@@ -164,6 +120,26 @@ dbs_comp depthLimit = go
       if depth <= depthLimit then go $ k tree' (depth, tsRest') ((), esRest') else go $ k fail (depth, tsRest') ((), esRest'))
     go (Pure a) = pure a
 
+nbs_comp :: Int -> CTransformer () Int
+nbs_comp node_limit = go 
+  where 
+    go :: CTransformer () Int
+    go (InitT k) = initT (\tsRest esRest -> go $ k ((), tsRest) (0, esRest))
+    go (LeftT  (_, tsRest) k) = leftT  tsRest (\tsRest' -> go $ k ((), tsRest'))
+    go (RightT (_, tsRest) k) = rightT tsRest (\tsRest' -> go $ k ((), tsRest'))
+    go (NextT tree (_, tsRest) (nodes, esRest) k) = nextT tree tsRest esRest (\tree' tsRest' esRest' -> 
+      if nodes <= node_limit then go $ k tree' ((), tsRest') (nodes+1, esRest') else go $ k fail ((), tsRest') (nodes+1, esRest'))
+    go (Pure a) = pure a 
+    
+
 test_dbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 test_dbs depthOuter depthInner model = run $ runEffects . it . (dbs_comp depthOuter) . (dbs_comp depthInner) .
   (traverseQ []) <$> eval model
+
+test_nbs :: Solver solver => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+test_nbs nodes model = run $ runEffects . it . (nbs_comp nodes) . (traverseQ []) <$> eval model
+
+sols :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+sols model = run $ runEffects . it . (traverseQ []) <$> eval model
+
+
