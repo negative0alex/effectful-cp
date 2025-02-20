@@ -28,7 +28,7 @@ module CPSolve (
 , (@\==)
 , addSum) where
 import Control.Monad.Free (Free (..))
-import SplitCPEffects (Sub(..), project, inject)
+import Effects (Sub(..), project, inject)
 import FD.OvertonFD (OvertonFD, OPlus ((:+)), OConstraint (..))
 import Solver(Solver(..))
 

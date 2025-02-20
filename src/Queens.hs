@@ -7,13 +7,13 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Queens2 where 
+module Queens where 
 import Prelude hiding (fail)
 import Data.List (tails)
 import FD.OvertonFD as OvertonFD
 import FD.Domain as Domain
 import GHC.Exts (sortWith)
-import SplitCPEffects ((:+:), Void)
+import Effects ((:+:), Void)
 import CPSolve (CPSolve, exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic)
 import Control.Monad.Free (Free)
 import NonDet (try, fail, NonDet)

@@ -60,10 +60,10 @@ library
     -- Modules exported by the library.
     exposed-modules:  Handlers
                     , Solver
-                    , SplitCPEffects
+                    , Effects
                     , NonDet 
                     , CPSolve
-                    , Queens2
+                    , Queens
                     , Transformer
 
     -- Modules included in this library but not exported.

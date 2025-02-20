@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
-module SplitCPEffects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe)
+module Effects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe)
 where
 import Control.Monad.Free (Free(..))
 

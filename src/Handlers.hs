@@ -9,7 +9,7 @@
 
 module Handlers where
 import NonDet (NonDet (..), pattern Fail, pattern (:|:), fail, try)
-import SplitCPEffects (Sub (..), (:+:) (..), pattern Other, Void, runEffects)
+import Effects (Sub (..), (:+:) (..), pattern Other, Void, runEffects)
 import Control.Monad.Free (Free (..))
 import Prelude hiding (fail)
 import Solver (Solver (..))

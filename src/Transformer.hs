@@ -9,7 +9,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Transformer(TransformerE(..), leftT, rightT, nextT, pattern LeftT, pattern RightT, pattern NextT, pattern InitT, initT) where 
 import Control.Monad.Free
-import SplitCPEffects
+import Effects
 
 {-
 class Transformer t where
