@@ -96,3 +96,16 @@ assignment q = dynamic $ do
   d <- fd_domain q
   let v = head d
   pure $ pure v
+
+-- ----------------------| Knapsack |------------------------
+
+knapsack :: Int -> [Int] -> Free (NonDet :+: Void) [Int]
+knapsack w vs
+  | w < 0  = fail
+  | w == 0 = pure []
+  | otherwise  = do
+    v <- select vs
+    vs' <- knapsack (w-v) vs
+    pure (v:vs')
+  where
+    select = foldr (try . pure) fail

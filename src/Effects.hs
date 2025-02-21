@@ -45,6 +45,13 @@ instance {-# INCOHERENT #-}
     prj (Inl fa) = Just fa
     prj _ = Nothing
 
+instance {-# INCOHERENT #-}
+  (Functor (f a b c), Functor sig2, a ~ x, b ~ y, c ~ z) => f x y z `Sub` (f a b c :+: sig2) where 
+    inj = Inl 
+    prj (Inl fa) = Just fa
+    prj _ = Nothing
+
+
 
 instance {-# OVERLAPPABLE #-}
   (Functor sig1, sig `Sub` sig2) => sig `Sub` (sig1 :+: sig2) where
