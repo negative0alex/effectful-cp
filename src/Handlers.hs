@@ -67,35 +67,6 @@ solve :: forall solver q a sig ts es.
   q -> Free (CPSolve solver :+: NonDet :+: sig) a ->
     solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
 solve queue model = undefined 
-  where 
-    go :: q -> Free (CPSolve solver :+: NonDet :+: sig) a -> ts -> es ->
-      solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
-    go q (Pure a) _ es = ((a:) <$>) <$> (continue q es)
-    -- NonDet
-    go q (Fail) _ es = continue q es 
-    go q (l :|: r) ts es = do 
-      now <- mark 
-      lsrs <- pure (leftT @ts @es @sig ts (\ls -> rightT @ts @es @sig ts (\rs -> pure (ls,rs))))
-      let (ls, rs) = extract lsrs
-      let q' = pushQ (ls, l, now) $ pushQ (rs, r, now) $ q 
-      continue q' es
-    -- CPSolve 
-    go q (NewVar k) ts es = do 
-      var <- newvar 
-      go q (k var) ts es 
-    go q (Add c k) ts es = do 
-      success <- addCons c 
-      if success then go q k ts es else go q fail ts es 
-    go q (Dynamic d) ts es = d >>= (\t -> go q t ts es)
-    continue :: q -> es -> solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
-    continue q es
-      | nullQ q   = pure . pure $ []
-      | otherwise = do 
-        let ((ts, tree, label), q') = popQ q 
-        goto label
-        let ttses = nextT @ts @es @sig tree ts es (\tree'' ts' es' -> pure (tree'', ts', es'))
-        let (treeNew, tsNew, esNew) = extract ttses
-        go q' treeNew tsNew esNew
 
 
 it :: forall el a sig. (Functor sig) => Free (TransformerE () () el :+: sig) [a] -> Free Void [a] 
