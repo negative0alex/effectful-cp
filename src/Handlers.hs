@@ -62,11 +62,14 @@ traverseQ  queue model = initT (\tsInit esInit -> go queue model tsInit esInit)
 extract :: Free f a -> a
 extract (Pure a) = a
 
+
+
+-- put solver at the end
 solve :: forall solver q a sig ts es. 
   (Solver solver, Queue q, Elem q~ (ts, Free (CPSolve solver :+: NonDet :+: sig) a, Label solver), Functor sig) =>
   q -> Free (CPSolve solver :+: NonDet :+: sig) a ->
     solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
-solve queue model = undefined 
+solve queue model = undefined
 
 
 it :: forall el a sig. (Functor sig) => Free (TransformerE () () el :+: sig) [a] -> Free Void [a] 
@@ -90,7 +93,7 @@ makeT tsInit esInit solEs leftTs rightTs nextState = go
     go :: Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
       Free (TransformerE tsRest esRest (Free (NonDet :+: Void) a) :+: Void) [a]
     go (InitT k) = initT (\tsRest esRest -> go $ k (tsInit, tsRest) (esInit, esRest))
-    go (SolT (es, esRest) k)  = solT esRest (\esRest' -> go $ k (solEs es, esRest'))
+    go (SolT (es, esRest) k)   = solT esRest (\esRest' -> go $ k (solEs es, esRest'))
     go (LeftT  (ts, tsRest) k) = leftT  tsRest (\tsRest' -> go $ k (leftTs  ts, tsRest'))
     go (RightT (ts, tsRest) k) = rightT tsRest (\tsRest' -> go $ k (rightTs ts, tsRest'))
     go (NextT tree (ts, tsRest) (es, esRest) k) = let (ts', es', tree') = nextState ts es tree in 
@@ -109,7 +112,6 @@ nbsC nodeLimit = makeT () 0 id id id (\_ nodes tree -> ((), nodes + 1, if nodes 
 
 testDbs :: Solver solver => Int  -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbs  depth model = run $ runEffects . it . (dbsC depth) . (traverseQ []) <$> eval model
-
 
 testNbs :: Solver solver => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbs nodes model = run $ runEffects . it . (nbsC nodes) . (traverseQ []) <$> eval model
