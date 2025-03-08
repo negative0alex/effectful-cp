@@ -7,9 +7,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveFunctor #-}
-module Effects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe)
+module Effects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr)
 where
-import Control.Monad.Free (Free(..))
+import Control.Monad.Free (Free(..), MonadFree (wrap))
 
 
 data (sig1 :+: sig2) cnt = Inl (sig1 cnt) | Inr (sig2 cnt)
@@ -77,12 +77,19 @@ putL = Free . Inl
 getRUnsafe :: (sig1 :+: sig2) a -> sig2 a 
 getRUnsafe (Inr a) = a 
 
+getLUnsafe :: (sig1 :+: sig2) a -> sig1 a 
+getLUnsafe (Inl a) = a 
+
 
 data Void cnt deriving Functor
 
 runEffects :: Free Void a -> a
 runEffects (Pure x) = x
 runEffects _ = error "impossible???"
+
+unitr :: Functor sig => Free (sig :+: Void) a -> Free sig a 
+unitr (Pure a) = pure a 
+unitr (Free sig) = wrap $ unitr <$> getLUnsafe sig
 
 pattern Other :: sig2 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
 pattern Other s = Free (Inr s)

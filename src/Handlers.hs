@@ -9,7 +9,7 @@
 
 module Handlers where
 import NonDet (NonDet (..), pattern Fail, pattern (:|:), fail, try)
-import Effects (Sub (..), (:+:) (..), Void, runEffects)
+import Effects (Sub (..), (:+:) (..), Void, runEffects, pattern Other, unitr)
 import Control.Monad.Free (Free (..))
 import Prelude hiding (fail)
 import Solver (Solver (..))
@@ -59,26 +59,30 @@ traverseQ  queue model = initT (\tsInit esInit -> go queue model tsInit esInit)
       nextT tree ts es (\tree' ts' es' -> go q' tree' ts' es')
 
 
-extract :: Free f a -> a
-extract (Pure a) = a
-
 
 
 -- put solver at the end
 solve :: forall solver q a sig ts es. 
   (Solver solver, Queue q, Elem q~ (ts, Free (CPSolve solver :+: NonDet :+: sig) a, Label solver), Functor sig) =>
   q -> Free (CPSolve solver :+: NonDet :+: sig) a ->
-    solver (Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a])
+    Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: solver :+: sig) [a]
 solve queue model = undefined
 
 
-it :: forall el a sig. (Functor sig) => Free (TransformerE () () el :+: sig) [a] -> Free Void [a] 
+it :: forall el a sig. (Functor sig) => Free (TransformerE () () el :+: sig) [a] -> Free sig [a] 
 it (SolT _ k)   = it $ k ()
 it (InitT k)    = it $ k () ()
 it (LeftT _ k)  = it $ k ()
 it (RightT _ k) = it (k ())
 it (NextT x _ _ k) = it $ k x () ()
 it (Pure a) = pure a
+
+propagateConstraints :: forall solver a. (Solver solver) => Free (solver :+: Void) [a] -> solver [a]
+propagateConstraints = go . unitr 
+  where 
+    go :: Free (solver) [a] -> solver [a]
+    go (Pure as) = pure as
+    go (Free solv) = solv >>= go
 
 type CTransformer ts es = forall a tsRest esRest. 
   Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: Void) a) :+: Void) [a] ->
