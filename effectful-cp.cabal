@@ -59,6 +59,8 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  Handlers
+                    , HandlersExperiment
+                    , CombinedHandlers
                     , Solver
                     , Effects
                     , NonDet 

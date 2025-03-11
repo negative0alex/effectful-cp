@@ -2,8 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Solver (Solver(..)) where
 
--- type family Constraint solver = r | r -> solver 
-
 class (Monad solver) => Solver solver where
   type Constraint solver = r | r -> solver
   type Term solver = r | r -> solver

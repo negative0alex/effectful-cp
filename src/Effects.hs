@@ -6,8 +6,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveFunctor #-}
-module Effects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr)
+module Effects (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr, wrapF, wrapFree)
 where
 import Control.Monad.Free (Free(..), MonadFree (wrap))
 
@@ -90,6 +91,12 @@ runEffects _ = error "impossible???"
 unitr :: Functor sig => Free (sig :+: Void) a -> Free sig a 
 unitr (Pure a) = pure a 
 unitr (Free sig) = wrap $ unitr <$> getLUnsafe sig
+
+wrapF :: m `Sub` sig => m a -> Free sig a 
+wrapF m = wrap . inj $ pure <$> m
+
+wrapFree :: forall sub sup a. sub `Sub` sup => sub (Free sup a) -> Free sup a 
+wrapFree msig = wrap $ inj @sub @sup msig
 
 pattern Other :: sig2 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
 pattern Other s = Free (Inr s)
