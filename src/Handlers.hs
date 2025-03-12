@@ -144,9 +144,6 @@ testDbs depth model = run $ runEffects . it . (dbsC depth) . (traverseQ []) <$> 
 testNbs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbs nodes model = run $ runEffects . it . (nbsC nodes) . (traverseQ []) <$> eval model
 
-testNbs' :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
-testNbs' nodes model = run $ runEffects . it . (nbsC nodes) . (traverseQ []) <$> eval model
-
 testDbsBfs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbsBfs nodes model = run $ runEffects . it . (dbsC nodes) . (traverseQ (emptyQ :: Seq a)) <$> eval model
 
@@ -158,6 +155,9 @@ testItBfs model = run $ runEffects . it . (traverseQ (emptyQ :: Seq a)) <$> eval
 
 testFs :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testFs model = run $ runEffects . it . fsC . (traverseQ []) <$> eval model
+
+testNbsDbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testNbsDbs nodes depth model = run $ runEffects . it . (nbsC nodes) . (dbsC depth) . (traverseQ []) <$> eval model
 
 naiveAllSols :: forall solver a. (Solver solver) => Free (CPSolve solver :+: NonDet :+: Void) a -> solver [a]
 naiveAllSols = go 

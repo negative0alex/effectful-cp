@@ -12,6 +12,9 @@ import NonDet
 import Effects
 import Transformer
 import Prelude hiding (fail)
+import Solver
+import Handlers
+import CPSolve
 
 -- makeT ::
 --   forall ts es a tsRest esRest sig.
@@ -84,3 +87,5 @@ nbsAfterDbs nodeLimit depthLimit = go
     go (Pure a) = pure a
     go (Other op) = wrap (go <$> op)
     
+testNbsAfterDbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testNbsAfterDbs nodes depth model = run $ runEffects . (nbsAfterDbs nodes depth) . (traverseQ []) <$> eval model
