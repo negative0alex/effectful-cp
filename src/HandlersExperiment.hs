@@ -8,6 +8,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# LANGUAGE TransformListComp #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 
 module HandlersExperiment where
 
@@ -76,13 +77,13 @@ propagateConstraints = go . unitr
     go (Free solv) = solv >>= go
 
 type CTransformer' ts es =
-  forall a tsRest esRest solver sig. (Functor sig, Solver solver) =>
+  forall a tsRest esRest solver sig. (Functor sig, Solver solver, solver `Sub` sig) =>
   Free (TransformerE (ts, tsRest) (es, esRest) (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a] ->
   Free (TransformerE tsRest esRest (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
 
 makeT' ::
   forall ts es a tsRest esRest sig solver.
-  (Functor sig, Solver solver) =>
+  (Functor sig, Solver solver, solver `Sub` sig) =>
   ts ->
   es ->
   (es -> es) ->
@@ -127,6 +128,14 @@ testSolverDbs depth model = run . propagateConstraints . it . (dbs' depth) . (so
 
 testSolverFs :: (Solver solver) => Free (CPSolve solver :+: NonDet :+: solver :+: Void) a -> [a]
 testSolverFs model = run . propagateConstraints . it . fs' . (solve []) $ model
+
+-- type Bound solver = forall a sig. (NonDet `Sub` sig, solver `Sub` sig, CPSolve solver `Sub` sig) => Free sig a -> Free sig a
+-- type NewBound solver = solver (Bound solver)
+
+-- data BBEs solver = BBEs Int (Bound solver)
+
+-- bb :: NewBound solver -> CTransformer' Int (BBEs solver) 
+-- bb newbound = makeT' 0 (BBEs 0 id) _ id id _
 
 -- -------| MODIFIED QUEENS
 

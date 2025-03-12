@@ -136,8 +136,6 @@ dbsC depthLimit = makeT 0 () id succ succ (\depth _ tree -> (depth, (), if depth
 nbsC :: Int -> CTransformer () Int
 nbsC nodeLimit = makeT () 0 id id id (\_ nodes tree -> ((), nodes + 1, if nodes <= nodeLimit then tree else fail))
 
-
-
 ----------------------------------- Testing
 
 testDbs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
