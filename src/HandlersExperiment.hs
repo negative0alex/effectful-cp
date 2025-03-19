@@ -76,6 +76,44 @@ propagateConstraints = go . unitr
     go (Pure as) = pure as
     go (Free solv) = solv >>= go
 
+allDbs :: forall solver q a sig.
+  (Solver solver, Queue q, Elem q ~ (Int, Free (CPSolve solver :+: NonDet :+: sig) a, Label solver), solver `Sub` sig) =>
+  Int -> 
+  q ->
+  Free (CPSolve solver :+: NonDet :+: sig) a ->
+  Free sig [a]
+allDbs depthLimit queue model = go queue model 0 ()
+  where 
+    go ::
+      q ->
+      Free (CPSolve solver :+: NonDet :+: sig) a ->
+      Int ->
+      () ->
+      Free sig [a]
+    go q (Pure a) _depth u = (a :) <$> continue q (id u)
+    go q (l :|: r) depth u = do 
+      now <- wrapF mark 
+      continue (pushQ (succ depth, l, now) $ pushQ (succ depth, r, now) q) u
+    go q Fail _depth u = continue q u
+    go q (NewVar k) depth u = do 
+      v <- wrapF @solver newvar 
+      go q (k v) depth u
+    go q (Add c k) depth u = do 
+      successful <- wrapF @solver (addCons c)
+      if successful then go q k depth u else go q fail depth u
+    go q (Dynamic k) depth u = do 
+      term <- wrapF @solver k
+      go q term depth u
+
+    continue :: q -> () -> Free sig [a]
+    continue q u
+      | nullQ q = pure []
+      | otherwise = do
+          let ((depth, tree, label), q') = popQ q
+          wrapF @solver (goto label)
+          let (depth', u', tree') = (id depth, id u, if depth <= depthLimit then tree else fail)
+          go q' tree' depth' u'
+
 type CTransformer' ts es =
   forall a tsRest esRest solver sig. (Functor sig, Solver solver, solver `Sub` sig) =>
   Free (TransformerE (ts, tsRest) (es, esRest) (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a] ->
@@ -129,13 +167,7 @@ testSolverDbs depth model = run . propagateConstraints . it . (dbs' depth) . (so
 testSolverFs :: (Solver solver) => Free (CPSolve solver :+: NonDet :+: solver :+: Void) a -> [a]
 testSolverFs model = run . propagateConstraints . it . fs' . (solve []) $ model
 
--- type Bound solver = forall a sig. (NonDet `Sub` sig, solver `Sub` sig, CPSolve solver `Sub` sig) => Free sig a -> Free sig a
--- type NewBound solver = solver (Bound solver)
-
--- data BBEs solver = BBEs Int (Bound solver)
-
--- bb :: NewBound solver -> CTransformer' Int (BBEs solver) 
--- bb newbound = makeT' 0 (BBEs 0 id) _ id id _
+testAllDbs depth model = run . propagateConstraints . (allDbs depth []) $ model
 
 -- -------| MODIFIED QUEENS
 

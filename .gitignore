@@ -23,4 +23,7 @@ cabal.project.local~
 .ghc.environment.*
 Free.hs
 finite-domain
-benchmark.md
+benchmark*
+*.svg
+flamegraphs
+memory-profiling

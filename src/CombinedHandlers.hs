@@ -6,86 +6,131 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-module CombinedHandlers where
+
+module CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse) where
+
+import CPSolve
 import Control.Monad.Free
-import NonDet
 import Effects
+import Handlers
+import NonDet
+import Queues
+import Solver
 import Transformer
 import Prelude hiding (fail)
-import Solver
-import Handlers
-import CPSolve
-
--- makeT ::
---   forall ts es a tsRest esRest sig.
---   (Functor sig) =>
---   ts ->
---   es ->
---   (es -> es) ->
---   (ts -> ts) ->
---   (ts -> ts) ->
---   (ts -> es -> Free (NonDet :+: sig) a -> (ts, es, Free (NonDet :+: sig) a)) ->
---   ( Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: sig) a) :+: sig) [a] ->
---     Free (TransformerE tsRest esRest (Free (NonDet :+: sig) a) :+: sig) [a]
---   )
--- makeT tsInit esInit solEs leftTs rightTs nextState = go
---   where
---     go ::
---       Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: sig) a) :+: sig) [a] ->
---       Free (TransformerE tsRest esRest (Free (NonDet :+: sig) a) :+: sig) [a]
---     go (InitT k) = initT (\tsRest esRest -> go $ k (tsInit, tsRest) (esInit, esRest))
---     go (SolT (es, esRest) k) = solT esRest (\esRest' -> go $ k (solEs es, esRest'))
---     go (LeftT (ts, tsRest) k) = leftT tsRest (\tsRest' -> go $ k (leftTs ts, tsRest'))
---     go (RightT (ts, tsRest) k) = rightT tsRest (\tsRest' -> go $ k (rightTs ts, tsRest'))
---     go (NextT tree (ts, tsRest) (es, esRest) k) =
---       let (ts', es', tree') = nextState ts es tree
---        in nextT tree' tsRest esRest (\tree'' tsRest' esRest' -> go $ k tree'' (ts', tsRest') (es', esRest'))
---     go (Pure a) = pure a
---     go (Other op) = wrap $ Inr (go <$> op)
-
--- dbsC :: Int -> CTransformer Int ()
--- dbsC depthLimit = makeT 0 () id succ succ (\depth _ tree -> (depth, (), if depth <= depthLimit then tree else fail))
-
--- nbsC :: Int -> CTransformer () Int
--- nbsC nodeLimit = makeT () 0 id id id (\_ nodes tree -> ((), nodes + 1, if nodes <= nodeLimit then tree else fail))
-
--- type CTransformer ts es =
---   forall a tsRest esRest sig. (Functor sig) =>
---   Free (TransformerE (ts, tsRest) (es, esRest) (Free (NonDet :+: sig) a) :+: sig) [a] ->
---   Free (TransformerE tsRest esRest (Free (NonDet :+: sig) a) :+: sig) [a]
+import Control.Monad (liftM2)
 
 -- should have the same semantics as `it . dbs`
-dbsOnly :: forall sig a. (Functor sig) =>
-  Int -> Free (TransformerE Int () (Free (NonDet :+: sig) a) :+: sig) [a] -> Free sig [a]
-dbsOnly depthLimit = go 
-  where 
+dbsOnly ::
+  forall sig a.
+  (Functor sig) =>
+  Int ->
+  Free (TransformerE Int () (Free (NonDet :+: sig) a) :+: sig) [a] ->
+  Free sig [a]
+dbsOnly depthLimit = go
+  where
     go :: Free (TransformerE Int () (Free (NonDet :+: sig) a) :+: sig) [a] -> Free sig [a]
     go (InitT k) = go $ k 0 ()
     go (SolT _u k) = go $ k ()
     go (LeftT depth k) = go $ k $ succ depth
     go (RightT depth k) = go $ k $ succ depth
-    go (NextT tree depth u k) = let (ts', u', tree') = (id depth, id u, if depth <= depthLimit then tree else fail)
-                                  in go $ k tree' ts' u'
-    go (Pure a) = pure a 
+    go (NextT tree depth u k) =
+      let (ts', u', tree') = (id depth, id u, if depth <= depthLimit then tree else fail)
+       in go $ k tree' ts' u'
+    go (Pure a) = pure a
     go (Other op) = wrap (go <$> op)
 
 -- should have the same semantics as `it . nbs . dbs`
-nbsAfterDbs :: forall sig a. (Functor sig) => 
-  Int -> Int -> Free (TransformerE (Int, ()) ((), Int) (Free (NonDet :+: sig) a) :+: sig) [a] -> Free sig [a]
-nbsAfterDbs nodeLimit depthLimit = go 
-  where 
+nbsAfterDbs ::
+  forall sig a.
+  (Functor sig) =>
+  Int ->
+  Int ->
+  Free (TransformerE (Int, ()) ((), Int) (Free (NonDet :+: sig) a) :+: sig) [a] ->
+  Free sig [a]
+nbsAfterDbs nodeLimit depthLimit = go
+  where
     go :: Free (TransformerE (Int, ()) ((), Int) (Free (NonDet :+: sig) a) :+: sig) [a] -> Free sig [a]
     go (InitT k) = go $ k (0, ()) ((), 0)
-    go (SolT ((), nodes) k)  = go $ k $ (id (), id nodes)
-    go (LeftT (depth, u) k)  = go $ k $ (succ depth, id u)
+    go (SolT ((), nodes) k) = go $ k $ (id (), id nodes)
+    go (LeftT (depth, u) k) = go $ k $ (succ depth, id u)
     go (RightT (depth, u) k) = go $ k $ (succ depth, id u)
-    go (NextT tree (depth, u1) (u2, nodes) k) = let (depth', u2', tree') = 
-                                                      (id depth, id u2, if depth <= depthLimit then tree else fail)
-                                                    (u1', nodes', tree'') = (id u1, succ nodes,
-                                                      if nodes <= nodeLimit then tree' else fail)
-                                                in go $ k tree'' (depth', u1') (u2', nodes')
+    go (NextT tree (depth, u1) (u2, nodes) k) =
+      let (depth', u2', tree') =
+            (id depth, id u2, if depth <= depthLimit then tree else fail)
+          (u1', nodes', tree'') =
+            ( id u1,
+              succ nodes,
+              if nodes <= nodeLimit then tree' else fail
+            )
+       in go $ k tree'' (depth', u1') (u2', nodes')
     go (Pure a) = pure a
     go (Other op) = wrap (go <$> op)
-    
-testNbsAfterDbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+
+testNbsAfterDbs :: (Solver solver) => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbsAfterDbs nodes depth model = run $ runEffects . (nbsAfterDbs nodes depth) . (traverseQ []) <$> eval model
+
+-- combine dbs and traverseQ
+dbsTraverseQ ::
+  forall sig a q.
+  (Queue q, Elem q ~ (Int, Free (NonDet :+: sig) a), Functor sig) =>
+  Int ->
+  q ->
+  Free (NonDet :+: sig) a ->
+  Free sig [a]
+dbsTraverseQ depthLimit queue model = go queue model 0 () -- init happens immediately
+  where
+    go ::
+      q ->
+      Free (NonDet :+: sig) a ->
+      Int ->
+      () ->
+      Free sig [a]
+    go q (Pure a) _depth u = (a :) <$> continue q (id u) -- apply SolT transformation here
+    go q (l :|: r) depth u = continue (pushQ (succ depth, l) $ pushQ (succ depth, r) q) u
+    go q Fail _depth u = continue q u
+
+    continue :: q -> () -> Free sig [a]
+    continue q u
+      | nullQ q = pure []
+      | otherwise = do
+          let ((depth, tree), q') = popQ q
+          let (depth', u', tree') = (depth, u, if depth <= depthLimit then tree else fail)
+          go q' tree' depth' u'
+
+nbsAfterDbsTraverseQ ::
+  forall sig a q.
+  (Queue q, Elem q ~ ((Int, ()), Free (NonDet :+: sig) a), Functor sig) =>
+  Int ->
+  Int ->
+  q ->
+  Free (NonDet :+: sig) a ->
+  Free sig [a]
+nbsAfterDbsTraverseQ nodeLimit depthLimit queue model = go queue model (0, ()) ((), 0)
+  where
+    go ::
+      q ->
+      Free (NonDet :+: sig) a ->
+      (Int, ()) ->
+      ((), Int) ->
+      Free sig [a]
+    go q (Pure a) (_depth, u1) (_u2, nodes) = (a :) <$> continue q (id u1, id nodes)
+    go q (l :|: r) (depth, u1) (u2, nodes) =
+      continue (pushQ ((succ depth, id u1), l) $ pushQ ((succ depth, id u1), r) q) (u2, nodes)
+    go q Fail _ts es = continue q es
+
+    continue :: q -> ((), Int) -> Free sig [a]
+    continue q (u1, nodes)
+      | nullQ q = pure []
+      | otherwise = do
+          let (((depth, u2), tree), q') = popQ q
+          let (depth', u2', tree') = (depth, u2, if depth <= depthLimit then tree else fail)
+          let (u1', nodes', tree'') = (u1, succ nodes, if nodes <= nodeLimit then tree' else fail)
+          go q' tree'' (depth', u1') (u2', nodes')
+
+
+testDbsTraverse :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testDbsTraverse depth model = run $ runEffects . (dbsTraverseQ depth []) <$> eval model
+
+testNbsAfterDbsTraverse :: (Solver solver) => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testNbsAfterDbsTraverse nodes depth model = run $ runEffects . (nbsAfterDbsTraverseQ nodes depth []) <$> eval model
