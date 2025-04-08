@@ -7,9 +7,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
-module CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse) where
+module CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse, testDbsNotReallyCPS, testDbsSlightlyCPS) where
 
 import CPSolve
+import Control.Monad (liftM2)
 import Control.Monad.Free
 import Effects
 import Handlers
@@ -18,7 +19,6 @@ import Queues
 import Solver
 import Transformer
 import Prelude hiding (fail)
-import Control.Monad (liftM2)
 
 -- should have the same semantics as `it . dbs`
 dbsOnly ::
@@ -128,9 +128,84 @@ nbsAfterDbsTraverseQ nodeLimit depthLimit queue model = go queue model (0, ()) (
           let (u1', nodes', tree'') = (u1, succ nodes, if nodes <= nodeLimit then tree' else fail)
           go q' tree'' (depth', u1') (u2', nodes')
 
-
 testDbsTraverse :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbsTraverse depth model = run $ runEffects . (dbsTraverseQ depth []) <$> eval model
 
 testNbsAfterDbsTraverse :: (Solver solver) => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbsAfterDbsTraverse nodes depth model = run $ runEffects . (nbsAfterDbsTraverseQ nodes depth []) <$> eval model
+
+dbsNotReallyCPS ::
+  forall sig a q.
+  (Queue q, Elem q ~ (Int, Free (NonDet :+: sig) a), Functor sig) =>
+  Int ->
+  q ->
+  Free (NonDet :+: sig) a ->
+  Free sig [a]
+dbsNotReallyCPS depthLimit queue model = go queue model 0 () id -- init happens immediately
+  where
+    go ::
+      q ->
+      Free (NonDet :+: sig) a ->
+      Int ->
+      () ->
+      (Free sig [a] -> b) ->
+      b
+    go q (Pure a) _depth u cont = continue q u (\sol -> cont $ (a :) <$> sol) -- apply SolT transformation here
+    go q (l :|: r) depth u cont = continue (pushQ (succ depth, l) $ pushQ (succ depth, r) q) u (\sol -> cont sol)
+    go q Fail _depth u cont = continue q u cont
+
+    continue :: q -> () -> (Free sig [a] -> b) -> b
+    continue q u cont
+      | nullQ q = cont . pure $ []
+      | otherwise = do
+          let ((depth, tree), q') = popQ q
+          let (depth', u', tree') = (depth, u, if depth <= depthLimit then tree else fail)
+          go q' tree' depth' u' cont
+
+testDbsNotReallyCPS :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testDbsNotReallyCPS depth model = run $ runEffects . (dbsNotReallyCPS depth []) <$> eval model
+
+idCPS :: a -> (a -> b) -> b
+idCPS a cont = cont a
+
+succCPS :: Int -> (Int -> b) -> b
+succCPS i cont = cont (succ i)
+
+dbsNextCont :: (Functor sig) => Int -> Int -> () -> Free (NonDet :+: sig) a -> ((Int, (), Free (NonDet :+: sig) a) -> b) -> b
+dbsNextCont depthLimit depth u tree cont = cont (depth, u, if depth <= depthLimit then tree else fail)
+
+dbsSlightlyCPS ::
+  forall sig a q.
+  (Queue q, Elem q ~ (Int, Free (NonDet :+: sig) a), Functor sig) =>
+  Int ->
+  q ->
+  Free (NonDet :+: sig) a ->
+  Free sig [a]
+dbsSlightlyCPS depthLimit queue model = go queue model 0 () id -- init happens immediately
+  where
+    go ::
+      q ->
+      Free (NonDet :+: sig) a ->
+      Int ->
+      () ->
+      (Free sig [a] -> b) ->
+      b
+    -- go q (Pure a) _depth u cont = continue q u (\sol -> cont $ (a :) <$> sol) -- apply SolT transformation here
+    go q (Pure a) _depth u cont = idCPS u (\u' -> continue q u' (\sol -> cont $ (a:) <$> sol)) -- apply SolT transformation here
+    go q (l :|: r) depth u cont = succCPS depth 
+      (\depthL -> succCPS depth 
+        (\depthR -> continue (pushQ (depthL, l) $ pushQ (depthR, r) q) u) cont)
+    go q Fail _depth u cont = continue q u cont
+
+    next = dbsNextCont @sig depthLimit
+
+    continue :: q -> () -> (Free sig [a] -> b) -> b
+    continue q u cont
+      | nullQ q = cont $ pure []
+      | otherwise =
+          let ((depth, tree), q') = popQ q
+           in next depth u tree (\(depth', u', tree') -> go q' tree' depth' u' cont)
+
+testDbsSlightlyCPS :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testDbsSlightlyCPS depth model = run $ runEffects . (dbsSlightlyCPS depth []) <$> eval model
+

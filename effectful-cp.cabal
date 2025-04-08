@@ -61,6 +61,8 @@ library
     exposed-modules:  Handlers
                     , HandlersExperiment
                     , CombinedHandlers
+                    , StagedHandlers
+                    , Staging
                     , Solver
                     , Effects
                     , NonDet 
@@ -84,6 +86,7 @@ library
                     , transformers
                     , lens
                     , mtl
+                    , template-haskell
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -107,7 +110,9 @@ executable effectful-cp
     -- Other library packages from which modules are imported.
     build-depends:
         base >=4.17.2.1,
-        effectful-cp
+        effectful-cp,
+        free,
+        template-haskell
 
     -- Directories containing source files.
     hs-source-dirs:   app
