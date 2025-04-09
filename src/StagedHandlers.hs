@@ -49,128 +49,53 @@ dbsTrans depthLimit =
       nextState = [||\depth u tree -> (depth, u, if depth <= depthLimit then tree else fail)||]
     }
 
+nbsTrans :: Int -> SearchTransformer () Int 
+nbsTrans nodeLimit = 
+  SearchTransformer
+    { tsInit = [|| () ||]
+    , esInit = [|| 0 ||]
+    , solEs = [|| id ||]
+    , leftTs = [|| id ||]
+    , rightTs = [|| id ||]
+    , nextState = [||\u nodes tree -> (u, nodes + 1, if nodes <= nodeLimit then tree else fail) ||]
+    }
+
 dbsTrans25 :: SearchTransformer Int ()
 dbsTrans25 = dbsTrans 25
 
-makeContinue :: forall q ts es a. (Queue q, Elem q ~ (ts, Free (NonDet :+: Void) a)
-  , Language.Haskell.TH.Syntax.Lift ts
-  , Language.Haskell.TH.Syntax.Lift es) =>
-  SearchTransformer ts es -> 
-  Code Q (ts -> es -> q -> Free (NonDet :+: Void) a -> Free Void [a]) ->
-  Code Q (q -> es -> Free Void [a])
-makeContinue (SearchTransformer _ _ _ _ _ nextState) traverse = go 
-  where 
-    go :: Code Q (q -> es -> Free Void [a])
-    go = [|| \q es -> 
-      if nullQ q then pure [] else (
-        let ((ts,tree), q') = popQ q in
-        let (ts', es', tree') = $$nextState ts es tree in 
-          $$traverse ts' es' q' tree'
-      ) ||]
+nbsTrans500000 :: SearchTransformer () Int 
+nbsTrans500000 = nbsTrans 500000
 
-makeTraverse :: forall q ts es a. (Queue q, Elem q ~ (ts, Free (NonDet :+: Void) a)
-  , Language.Haskell.TH.Syntax.Lift ts
-  , Language.Haskell.TH.Syntax.Lift es) =>
-  SearchTransformer ts es -> 
-  Code Q (q -> es -> Free Void [a]) ->
-  Code Q (ts -> es -> q -> Free (NonDet :+: Void) a -> Free Void [a])
-makeTraverse (SearchTransformer _ _ solEs leftTs rightTs _) continue = go 
-  where 
-    go :: Code Q (ts -> es -> q -> Free (NonDet :+: Void) a -> Free Void [a])
-    go = [|| 
-      \ts es q model -> case model of 
-        Pure a -> (a :) <$> $$continue q ($$solEs es)
-        l :|: r -> let q' = pushQ ($$leftTs ts, l) $ pushQ ($$rightTs ts, r) q
-                    in $$continue q' es
-        Fail -> $$continue q es
-       ||]
+dbsNbsTrans :: SearchTransformer (Int, ()) ((), Int)
+dbsNbsTrans = composeTrans dbsTrans25 nbsTrans500000
 
-stageOne' :: forall q ts es a. (Queue q, Elem q ~ (ts, Free (NonDet :+: Void) a)
-  , Language.Haskell.TH.Syntax.Lift ts
-  , Language.Haskell.TH.Syntax.Lift es ) =>
-  SearchTransformer ts es -> 
-  Code Q (Free (NonDet :+: Void) a -> Free Void [a])
-stageOne' transformer = [||\model -> $$traverse $$(tsInit transformer) $$(esInit transformer) emptyQ model||] 
-  where 
-    traverse :: Code Q (ts -> es -> q -> Free (NonDet :+: Void) a -> Free Void [a])
-    traverse = makeTraverse transformer [|| \q es -> $$continue q es ||]
-    continue :: Code Q (q -> es -> Free Void [a])
-    continue = makeContinue transformer [|| \ts es q tree -> $$traverse ts es q tree ||]
+stagedDbs25 :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedDbs25 = stageOne dbsTrans25 
 
-stagedDbs25 :: forall a. Code Q (Free (NonDet :+: Void) a -> Free Void [a])
-stagedDbs25 = stageOne @[(Int, Free (NonDet :+: Void) a)] @Int @() @a dbsTrans25 
-
+stagedDbsNbs :: Code Q ([((Int, ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedDbsNbs = stageOne dbsNbsTrans
 
 stageOne :: forall q ts es a. (Queue q, Elem q ~ (ts, Free (NonDet :+: Void) a)
   , Language.Haskell.TH.Syntax.Lift ts
   , Language.Haskell.TH.Syntax.Lift es ) =>
   SearchTransformer ts es -> 
-  Code Q (Free (NonDet :+: Void) a -> Free Void [a])
-stageOne (SearchTransformer tsInit esInit solEs leftTs rightTs nextState) = undefined
-  -- [|| $$goiv $$tsInit $$esInit emptyQ ||]
-  where
-    go' :: Code Q (ts -> es -> q -> Free (NonDet :+: Void) a -> Free Void [a])
-    -- go' = codeCurry $ \tsc -> codeCurry $ \esc -> codeCurry $ \qc -> codeCurry $ go tsc esc qc
-    go' = [|| 
-      \ts es q model -> 
-        case model of 
-          Pure a -> (a:) <$> $$continue' q ($$solEs es)
-          l :|: r -> let q' = pushQ ($$leftTs ts, l) $ pushQ ($$rightTs ts, r) q
-            in $$continue' q' es
-          Fail -> $$continue' q es 
-      ||]
+  Code Q (q -> Free (NonDet :+: Void) a -> Free Void [a])
+stageOne (SearchTransformer tsInit esInit solEs leftTs rightTs nextState) = rec2 
+  (\(_, continue) -> [||
+  \ts es q model -> 
+    case model of 
+      Pure a  -> (a:) <$> $$continue ($$solEs es) q
+      l :|: r -> let q' = pushQ ($$leftTs ts , l) $ pushQ ($$rightTs ts, r) q in $$continue es q'
+      Fail    -> $$continue es q
+  ||])
+  (\(go, _) -> [||
+  \es q -> if nullQ q then pure [] else
+    let ((ts, tree),q') = popQ q 
+        (ts', es', tree') = $$nextState ts es tree 
+    in $$go ts' es' q' tree'
+  ||])
+  (\(go, _) -> [|| $$go $$tsInit $$esInit ||])
 
-
-    go'' :: (Code Q ts -> Code Q es -> Code Q q -> Code Q (Free (NonDet :+: Void) a) -> Code Q (Free Void [a])) ->
-      (Code Q ts -> Code Q es -> Code Q q -> Code Q (Free (NonDet :+: Void) a) -> Code Q (Free Void [a]))
-    go'' next ts es q model = 
-      let continue = [||
-            \q es -> if nullQ q then pure [] else (
-              let ((ts, tree), q') = popQ q in 
-                let (ts', es', tree') = $$nextState ts es tree in 
-                  $$(next [||ts'||] [||es'||] [||q'||] [||tree'||])
-            )
-            ||]
-      in [|| 
-      case $$model of
-        Pure a -> (a:) <$> $$continue $$q ($$solEs $$es)
-
-        l :|: r -> let q' = pushQ ($$leftTs $$ts, l) $ pushQ ($$rightTs $$ts, r) $$q
-
-          in $$continue q' $$es
-        Fail -> $$continue $$q $$es
-      ||]
-      
-
-    -- go :: Code Q ts -> Code Q es -> Code Q q -> Code Q (Free (NonDet :+: Void) a) -> Code Q (Free Void [a])
-    -- go ts es q model = [||
-    --   case $$model of
-    --     Pure a -> (a:) <$> $$(continue q [||$$solEs $$es||])
-    --     l :|: r -> let q' = pushQ ($$leftTs $$ts, l) $ pushQ ($$rightTs $$ts, r) $$q
-    --       in $$(continue [||q'||] es)
-    --     Fail -> $$(continue q es)
-    --   ||]
-
-    -- continue :: Code Q q -> Code Q es -> Code Q (Free Void [a])
-    -- continue q es = [||
-    --       if nullQ $$q then pure [] else (
-    --         let ((ts, tree), q') = popQ $$q in
-    --         let (ts', es', tree') = $$nextState ts $$es tree in
-    --           $$(go') ts' es' q' tree'
-    --       )
-    --   ||]
-
-    continue' :: Code Q (q -> es -> Free Void [a])
-    continue' = [|| 
-      \q es -> 
-        if nullQ q then pure [] else (
-          let ((ts, tree), q') = popQ q in 
-            let (ts', es', tree') = $$nextState ts es tree in 
-              $$go' ts' es' q' tree'
-        ) 
-      ||]
-
--- ------------------------------------------
 
 composeTrans :: SearchTransformer ts1 es1 -> SearchTransformer ts2 es2 -> SearchTransformer (ts1, ts2) (es1, es2)
 composeTrans t1 t2 = SearchTransformer {
@@ -184,6 +109,10 @@ composeTrans t1 t2 = SearchTransformer {
                                                      in
                                                       ((ts1',ts2'), (es1', es2'), tree'') ||]
 }
+
+
+-- ------------------------------------------
+
 
 type Mk2 a b c = (Code Q a, Code Q b) -> Code Q c
 

@@ -32,16 +32,19 @@ main = do
   let sols = case arg of 
         "naive" -> Handlers.testNaive $ Queens.nqueens queens
         "handlers_it" -> Handlers.testIt $ Queens.nqueens queens
-        "handlers_dbs20" -> Handlers.testDbs depth $ Queens.nqueens queens
+        "handlers_dbs" -> Handlers.testDbs depth $ Queens.nqueens queens
         "experiment_it" -> HandlersExperiment.testSolver $ HandlersExperiment.nqueens queens 
-        "experiment_dbs20" -> HandlersExperiment.testSolverDbs depth $ HandlersExperiment.nqueens queens
+        "experiment_dbs" -> HandlersExperiment.testSolverDbs depth $ HandlersExperiment.nqueens queens
         "nbs_dbs_comp" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
         "nbs_dbs_only" -> CombinedHandlers.testNbsAfterDbs nodes depth $ Queens.nqueens queens
-        "traverse_dbs20" -> CombinedHandlers.testDbsTraverse depth $ Queens.nqueens queens
+        "traverse_dbs" -> CombinedHandlers.testDbsTraverse depth $ Queens.nqueens queens
         "traverse_nbs_dbs" -> CombinedHandlers.testNbsAfterDbsTraverse nodes depth $ Queens.nqueens queens
-        "all_dbs20" -> HandlersExperiment.testAllDbs depth $ HandlersExperiment.nqueens queens
-        "not_really20" -> CombinedHandlers.testDbsNotReallyCPS depth $ Queens.nqueens queens
-        "slightly20" -> CombinedHandlers.testDbsSlightlyCPS depth $ Queens.nqueens queens
+        "all_dbs" -> HandlersExperiment.testAllDbs depth $ HandlersExperiment.nqueens queens
+        "not_really" -> CombinedHandlers.testDbsNotReallyCPS depth $ Queens.nqueens queens
+        "slightly" -> CombinedHandlers.testDbsSlightlyCPS depth $ Queens.nqueens queens
+        "staged_dbs" -> if depth == 25 then Staging.testStagedDbs $ Queens.nqueens queens else []
+        "staged_nbs_dbs" -> if depth == 25 && nodes == 500000 then 
+            Staging.testStagedDbsNbs $ Queens.nqueens queens else []  
         _ -> []
   print sols
   
