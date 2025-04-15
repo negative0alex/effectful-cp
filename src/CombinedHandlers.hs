@@ -124,8 +124,8 @@ nbsAfterDbsTraverseQ nodeLimit depthLimit queue model = go queue model (0, ()) (
       | nullQ q = pure []
       | otherwise = do
           let (((depth, u2), tree), q') = popQ q
-          let (depth', u2', tree') = (depth, u2, if depth <= depthLimit then tree else fail)
-          let (u1', nodes', tree'') = (u1, succ nodes, if nodes <= nodeLimit then tree' else fail)
+              (depth', u2', tree') = (depth, u2, if depth <= depthLimit then tree else fail)
+              (u1', nodes', tree'') = (u1, succ nodes, if nodes <= nodeLimit then tree' else fail)
           go q' tree'' (depth', u1') (u2', nodes')
 
 testDbsTraverse :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
