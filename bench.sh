@@ -4,10 +4,13 @@ cabal build
 
 hyperfine --warmup 2 --export-markdown benchmark.md \
     'cabal run effectful-cp -- "handlers_dbs"' \
+    'cabal run effectful-cp -- "handlers_nbs_dbs"' \
+    'cabal run effectful-cp -- "handlers_lds_nbs_dbs"' \
     'cabal run effectful-cp -- "traverse_dbs"' \
     'cabal run effectful-cp -- "traverse_nbs_dbs"' \
     'cabal run effectful-cp -- "staged_dbs"' \
     'cabal run effectful-cp -- "staged_nbs_dbs"' \
+    'cabal run effectful-cp -- "staged_lds_nbs_dbs"' \
     # 'cabal run effectful-cp -- "not_really"' \
     # 'cabal run effectful-cp -- "slightly"' \
     # 'cabal run effectful-cp -- "nbs_dbs_comp"' \

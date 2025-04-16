@@ -136,6 +136,9 @@ dbsC depthLimit = makeT 0 () id succ succ (\depth _ tree -> (depth, (), if depth
 nbsC :: Int -> CTransformer () Int
 nbsC nodeLimit = makeT () 0 id id id (\_ nodes tree -> ((), nodes + 1, if nodes <= nodeLimit then tree else fail))
 
+ldsC :: Int -> CTransformer Int ()
+ldsC discrepancy = makeT 0 () id id succ (\disc _ tree -> (disc, (), if disc <= discrepancy then tree else fail ))
+
 ----------------------------------- Testing
 
 testDbs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
@@ -143,6 +146,9 @@ testDbs depth model = run $ runEffects . it . (dbsC depth) . (traverseQ []) <$> 
 
 testNbs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbs nodes model = run $ runEffects . it . (nbsC nodes) . (traverseQ []) <$> eval model
+
+testLds :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testLds disc model = run $ runEffects . it . (ldsC disc) . (traverseQ []) <$> eval model
 
 testDbsBfs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbsBfs nodes model = run $ runEffects . it . (dbsC nodes) . (traverseQ (emptyQ :: Seq a)) <$> eval model
@@ -158,6 +164,10 @@ testFs model = run $ runEffects . it . fsC . (traverseQ []) <$> eval model
 
 testNbsDbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testNbsDbs nodes depth model = run $ runEffects . it . (nbsC nodes) . (dbsC depth) . (traverseQ []) <$> eval model
+
+testLdsNbsDbs :: Solver solver => Int -> Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testLdsNbsDbs disc nodes depth model =
+  run $ runEffects . it . (ldsC disc) . (nbsC nodes) . (dbsC depth) . (traverseQ []) <$> eval model
 
 naiveAllSols :: forall solver a. (Solver solver) => Free (CPSolve solver :+: NonDet :+: Void) a -> solver [a]
 naiveAllSols = go 

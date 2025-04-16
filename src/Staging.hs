@@ -27,8 +27,14 @@ stagedDfsDbs25 = $$(stagedDbs25) []
 stagedDfsDbsNbs :: Free (NonDet :+: Void) a -> Free Void [a]
 stagedDfsDbsNbs = $$(stagedDbsNbs) []
 
+stagedDfsDbsNbsLds :: Free (NonDet :+: Void) a -> Free Void [a]
+stagedDfsDbsNbsLds = $$(stagedDbsNbsLds) []
+
 testStagedDbs :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testStagedDbs model = run $ runEffects . stagedDfsDbs25 <$> eval model
 
 testStagedDbsNbs :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testStagedDbsNbs model = run $ runEffects . stagedDfsDbsNbs <$> eval model
+
+testStagedDbsNbsLds :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testStagedDbsNbsLds model = run $ runEffects . stagedDfsDbsNbsLds <$> eval model

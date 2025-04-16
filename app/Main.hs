@@ -27,12 +27,15 @@ main :: IO ()
 main = do
   arg <- head <$> getArgs
   let queens = 10
-  let depth = 25
-  let nodes = 500000
-  let sols = case arg of 
+      depth = 25
+      nodes = 500000
+      disc = 5000000
+      sols = case arg of 
         "naive" -> Handlers.testNaive $ Queens.nqueens queens
         "handlers_it" -> Handlers.testIt $ Queens.nqueens queens
         "handlers_dbs" -> Handlers.testDbs depth $ Queens.nqueens queens
+        "handlers_nbs_dbs" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
+        "handlers_lds_nbs_dbs" -> Handlers.testLdsNbsDbs disc nodes depth $ Queens.nqueens queens
         "experiment_it" -> HandlersExperiment.testSolver $ HandlersExperiment.nqueens queens 
         "experiment_dbs" -> HandlersExperiment.testSolverDbs depth $ HandlersExperiment.nqueens queens
         "nbs_dbs_comp" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
@@ -45,6 +48,8 @@ main = do
         "staged_dbs" -> if depth == 25 then Staging.testStagedDbs $ Queens.nqueens queens else []
         "staged_nbs_dbs" -> if depth == 25 && nodes == 500000 then 
             Staging.testStagedDbsNbs $ Queens.nqueens queens else []  
+        "staged_lds_nbs_dbs" -> if depth == 25 && nodes == 500000 && disc == 5000000 then 
+            Staging.testStagedDbsNbsLds $ Queens.nqueens queens else []
         _ -> []
   print sols
   
