@@ -10,7 +10,6 @@
 module CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse, testDbsNotReallyCPS, testDbsSlightlyCPS) where
 
 import CPSolve
-import Control.Monad (liftM2)
 import Control.Monad.Free
 import Effects
 import Handlers

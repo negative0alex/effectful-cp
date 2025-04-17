@@ -21,7 +21,8 @@ import Language.Haskell.TH hiding (dyn)
 import NonDet
 import Queues
 import Prelude hiding (fail)
-import Data.Bifunctor (Bifunctor(bimap))
+import System.Random
+import Handlers (flipT)
 
 codeCurry :: (CodeQ a -> CodeQ b) -> CodeQ (a -> b)
 codeCurry f = [||\a -> $$(f [||a||])||]
@@ -82,6 +83,18 @@ ldsTrans discLimit =
   , nextState = \ts es model k -> k ts es [|| if $$ts <= discLimit then $$model else fail ||]
   }
 
+randTrans :: Int -> SearchTransformer () [Bool]
+randTrans seed = 
+  SearchTransformer
+  { tsInit = [|| () ||]
+  , esInit = [|| randoms $ mkStdGen seed  ||]
+  , solEs = flip ($)
+  , leftTs = flip ($)
+  , rightTs = flip ($)
+  , nextState = \ts es model k ->
+    k ts [|| tail $$es ||] [|| let tree = $$model in if head $$es then flipT tree else tree ||]
+  }
+
 dbsTrans25 :: SearchTransformer Int ()
 dbsTrans25 = dbsTrans 25
 
@@ -90,6 +103,18 @@ nbsTrans500000 = nbsTrans 500000
 
 ldsTrans5000000 :: SearchTransformer Int ()
 ldsTrans5000000 = ldsTrans 5000000
+
+randTrans2801 :: SearchTransformer () [Bool]
+randTrans2801 = randTrans 2801
+
+stagedRand :: Code Q ( [((), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedRand = stageOne randTrans2801
+
+dbsRandTrans :: SearchTransformer (Int, ()) ((), [Bool])
+dbsRandTrans = composeTrans dbsTrans25 randTrans2801
+
+stagedDbsRand :: Code Q ( [((Int, ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedDbsRand = stageOne dbsRandTrans
 
 dbsNbsTrans :: SearchTransformer (Int, ()) ((), Int)
 dbsNbsTrans = composeTrans dbsTrans25 nbsTrans500000

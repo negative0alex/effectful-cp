@@ -18,6 +18,7 @@ import Queues (Queue (..))
 import Solver (Solver (..))
 import Transformer (TransformerE, initT, leftT, nextT, rightT, solT, pattern InitT, pattern LeftT, pattern NextT, pattern RightT, pattern SolT)
 import Prelude hiding (fail)
+import System.Random
 
 eval ::
   forall solver a sig.
@@ -139,7 +140,21 @@ nbsC nodeLimit = makeT () 0 id id id (\_ nodes tree -> ((), nodes + 1, if nodes 
 ldsC :: Int -> CTransformer Int ()
 ldsC discrepancy = makeT 0 () id id succ (\disc _ tree -> (disc, (), if disc <= discrepancy then tree else fail ))
 
+flipT :: Functor sig => Free (NonDet :+: sig) a -> Free (NonDet :+: sig) a
+flipT (l :|: r) = try r l
+flipT other = other
+
+randC :: Int -> CTransformer () [Bool]
+randC seed = makeT () (randoms $ mkStdGen seed) id id id
+  (\_u coins tree -> ((), tail coins, if head coins then flipT tree else tree))
+
 ----------------------------------- Testing
+
+testRand :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testRand seed model = run $ runEffects . it . (randC seed) . (traverseQ []) <$> eval model
+
+testRandDbs :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testRandDbs seed depth model = run $ runEffects . it . (randC seed) . (dbsC depth) . (traverseQ []) <$> eval model
 
 testDbs :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbs depth model = run $ runEffects . it . (dbsC depth) . (traverseQ []) <$> eval model

@@ -5,21 +5,23 @@
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 {-# OPTIONS_GHC -ddump-to-file #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 
 module Staging where
-import Language.Haskell.TH
 import CPSolve
-import Control.Monad (liftM2)
 import Control.Monad.Free
 import Effects
 import Handlers
 import NonDet
-import Queues
 import Solver
-import Transformer
 import Prelude hiding (fail)
-import StagedHandlers (stageOne, dbsTrans25, SearchTransformer (..))
 import StagedHandlers
+
+stagedDfsRand2801 :: forall a. Free (NonDet :+: Void) a -> Free Void [a]
+stagedDfsRand2801 = $$(stageOne @[( (), Free (NonDet :+: Void) a )] randTrans2801) []
+
+stagedDfsDbsRand :: forall a. Free (NonDet :+: Void) a -> Free Void [a]
+stagedDfsDbsRand = $$(stageOne @[( (Int, ()), Free (NonDet :+: Void) a )] dbsRandTrans) []
 
 stagedDfsDbs25 :: Free (NonDet :+: Void) a -> Free Void [a]
 stagedDfsDbs25 = $$(stagedDbs25) []
@@ -29,6 +31,12 @@ stagedDfsDbsNbs = $$(stagedDbsNbs) []
 
 stagedDfsDbsNbsLds :: Free (NonDet :+: Void) a -> Free Void [a]
 stagedDfsDbsNbsLds = $$(stagedDbsNbsLds) []
+
+testStagedRand2801 :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testStagedRand2801 model = run $ runEffects . stagedDfsRand2801 <$> eval model
+
+testStagedDbsRand :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testStagedDbsRand model = run $ runEffects . stagedDfsDbsRand <$> eval model
 
 testStagedDbs :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testStagedDbs model = run $ runEffects . stagedDfsDbs25 <$> eval model

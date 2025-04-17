@@ -87,6 +87,7 @@ library
                     , lens
                     , mtl
                     , template-haskell
+                    , random
 
     -- Directories containing source files.
     hs-source-dirs:   src

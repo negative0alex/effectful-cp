@@ -9,17 +9,6 @@ import qualified Queens
 import qualified HandlersExperiment
 import System.Environment (getArgs)
 import qualified CombinedHandlers
-import Language.Haskell.TH
-import Effects (runEffects, (:+:))
-import Solver (run)
-import Handlers (eval)
-import StagedHandlers (dbsTrans)
-import Solver (Solver)
-import CPSolve (CPSolve)
-import NonDet (NonDet)
-import Effects (Void)
-import Control.Monad.Free
-import StagedHandlers
 import Staging
 
 
@@ -30,12 +19,14 @@ main = do
       depth = 25
       nodes = 500000
       disc = 5000000
+      seed = 2801
       sols = case arg of 
         "naive" -> Handlers.testNaive $ Queens.nqueens queens
         "handlers_it" -> Handlers.testIt $ Queens.nqueens queens
         "handlers_dbs" -> Handlers.testDbs depth $ Queens.nqueens queens
         "handlers_nbs_dbs" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
         "handlers_lds_nbs_dbs" -> Handlers.testLdsNbsDbs disc nodes depth $ Queens.nqueens queens
+        "handlers_rand_dbs" -> Handlers.testRandDbs seed depth $ Queens.nqueens queens
         "experiment_it" -> HandlersExperiment.testSolver $ HandlersExperiment.nqueens queens 
         "experiment_dbs" -> HandlersExperiment.testSolverDbs depth $ HandlersExperiment.nqueens queens
         "nbs_dbs_comp" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
@@ -50,6 +41,8 @@ main = do
             Staging.testStagedDbsNbs $ Queens.nqueens queens else []  
         "staged_lds_nbs_dbs" -> if depth == 25 && nodes == 500000 && disc == 5000000 then 
             Staging.testStagedDbsNbsLds $ Queens.nqueens queens else []
+        "staged_rand_dbs" -> if depth == 25 && seed == 2801 then 
+            Staging.testStagedDbsRand $ Queens.nqueens queens else []
         _ -> []
   print sols
   
