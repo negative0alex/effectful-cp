@@ -41,7 +41,7 @@ import Control.Monad.State.Lazy
 import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map ((!), Map)
-import Control.Monad (liftM,(<=<))
+import Control.Monad (liftM,(<=<), replicateM, when)
 
 import FD.Domain as Domain
 

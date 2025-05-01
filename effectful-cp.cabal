@@ -58,9 +58,18 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  MyLib
+    exposed-modules:  Handlers
                     , Solver
                     , Queens
+                    , Effects.NonDet 
+                    , Effects.CPSolve
+                    , Effects.Transformer
+                    , Effects.Core
+                    , Staging.Handlers
+                    , Staging.Staging
+                    , Staging.Optimisation
+                    , Experiments.HandlersExperiment
+                    , Experiments.CombinedHandlers
 
     -- Modules included in this library but not exported.
     other-modules:  FD.OvertonFD 
@@ -72,12 +81,14 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.1
+    build-depends:    base >=4.17.2.1
                     , free 
                     , containers
                     , transformers
                     , lens
                     , mtl
+                    , template-haskell
+                    , random
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -100,8 +111,10 @@ executable effectful-cp
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.17.2.1,
-        effectful-cp
+        base >=4.17.2.1,
+        effectful-cp,
+        free,
+        template-haskell
 
     -- Directories containing source files.
     hs-source-dirs:   app
@@ -133,5 +146,5 @@ test-suite effectful-cp-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.17.2.1,
+        base >=4.17.2.1,
         effectful-cp
