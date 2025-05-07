@@ -4,6 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE InstanceSigs #-}
 module Effects.NonDet (fail, pattern (:|:), try, NonDet(..), pattern Fail) where 
 import Control.Monad.Free (Free(..))
 import Effects.Core (Sub, project, inject)
@@ -13,6 +14,16 @@ data NonDet a where
   Try'  :: a -> a -> NonDet a
   Fail' :: NonDet a
   deriving Functor
+
+instance Foldable NonDet where 
+  foldMap :: Monoid m => (a -> m) -> NonDet a -> m
+  foldMap f (Try' l r) = f l <> f r
+  foldMap _ Fail' = mempty
+
+instance Traversable NonDet where 
+  traverse :: Applicative f => (a -> f b) -> NonDet a -> f (NonDet b)
+  traverse f (Try' l r) = (Try' <$> f l) <*> f r
+  traverse _ Fail' = pure Fail'
 
 pattern Fail :: (NonDet `Sub` sig) => Free sig a
 pattern Fail <- (project -> Just Fail')

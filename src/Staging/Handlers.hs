@@ -36,6 +36,15 @@ data SearchTransformer ts es = SearchTransformer
         (Code Q ts, Code Q es, Code Q (Free (NonDet :+: Void) a))
   }
 
+idTrans :: SearchTransformer () ()
+idTrans = SearchTransformer 
+  { tsInit = [|| () ||]
+  , esInit = [|| () ||]
+  , solEs = id 
+  , leftTs = id 
+  , rightTs = id 
+  , nextState = \ts es model -> (ts, es, model)
+  }
 
 dbsTrans :: Int -> SearchTransformer Int ()
 dbsTrans depthLimit =
@@ -45,7 +54,6 @@ dbsTrans depthLimit =
       solEs = id,
       leftTs = \ts -> [|| succ $$ts ||],
       rightTs = \ts -> [|| succ $$ts ||],
-      -- nextState = \tsc esc model k -> k tsc esc [|| if $$tsc <= depthLimit then $$model else fail ||]
       nextState = \ts es model -> (ts, es, [|| if $$ts <= depthLimit then $$model else fail||])
     }
 
@@ -95,6 +103,7 @@ ldsTrans5000000 = ldsTrans 5000000
 randTrans2801 :: SearchTransformer () [Bool]
 randTrans2801 = randTrans 2801
 
+
 stagedRand :: Code Q ( [((), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 stagedRand = stage1 randTrans2801
 
@@ -140,7 +149,6 @@ stage1 (SearchTransformer tsInit esInit solEs leftTs rightTs nextState) = rec2
           )
   ||])
   (\(go, _) -> [|| $$go $$tsInit $$esInit ||])
-  where  
 
 composeTrans :: SearchTransformer ts1 es1 -> SearchTransformer ts2 es2 -> SearchTransformer (ts1, ts2) (es1, es2)
 composeTrans t1 t2 =

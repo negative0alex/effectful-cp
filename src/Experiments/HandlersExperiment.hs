@@ -9,6 +9,9 @@
 {-# LANGUAGE TransformListComp #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE StarIsType #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Experiments.HandlersExperiment where
 
@@ -27,47 +30,46 @@ import qualified FD.OvertonFD as OvertonFD
 import qualified FD.Domain as Domain
 import GHC.Exts (sortWith)
 import Data.List
+import Effects.Lift
 
 -- put solver at the end
 solve ::
-  forall solver q a sig ts es.
-  (Solver solver, Queue q, Elem q ~ (ts, Free (CPSolve solver :+: NonDet :+: sig) a, Label solver), Functor sig,
-  solver `Sub` sig) =>
+  forall q a sig ts es.
+  (Queue q, Elem q ~ (ts, Free (CPSolve OvertonFD :+: sig) a, Label OvertonFD), Functor sig,
+  Solv OvertonFD `Sub` sig, NonDet `Sub` sig) =>
   q ->
-  Free (CPSolve solver :+: NonDet :+: sig) a ->
-  Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
+  Free (CPSolve OvertonFD :+: sig) a ->
+  Free (TransformerE ts es (Free (CPSolve OvertonFD :+: sig) a) :+: sig) [a]
 solve queue model = initT (\tsInit esInit -> go tsInit esInit queue model)
   where
     go ::
       ts ->
       es ->
       q ->
-      Free (CPSolve solver :+: NonDet :+: sig) a ->
-      Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
+      Free (CPSolve OvertonFD :+: sig) a ->
+      Free (TransformerE ts es (Free (CPSolve OvertonFD :+: sig) a) :+: sig) [a]
     go _ es q (Pure a) = solT es (\es' -> (a :) <$> continue q es')
     go ts es q (l :|: r) = do
-      now <- wrapF mark
-      leftT ts (\leftS -> rightT ts (\rightS -> continue (pushQ (leftS, l, now) $ pushQ (rightS, r, now) q) es))
+      Effects.Lift.mark $ \now ->
+        leftT ts (\leftS -> rightT ts (\rightS -> continue (pushQ (leftS, l, now) $ pushQ (rightS, r, now) q) es))
     go _ es q Fail = continue q es
     go ts es q (NewVar k) = do 
-      v <- wrapF @solver newvar 
-      go ts es q (k v)
+      Effects.Lift.newvar @OvertonFD $ \v ->
+        go ts es q (k v)
     go ts es q (Add c k) = do 
-      successful <- wrapF @solver (addCons c)
-      if successful then go ts es q k else go ts es q fail
+      Effects.Lift.addCons @OvertonFD c $ \successful ->
+        if successful then go ts es q k else go ts es q fail
     go ts es q (Dynamic k) = do 
-      term <- wrapF @solver k
-      go ts es q term
-    go ts es q (Other op) = case op of 
-      Inr op' -> wrap . Inr $ (go ts es q <$> op')
+      Effects.Lift.runS  @OvertonFD k $ \term ->
+        go ts es q term
 
-    continue :: q -> es -> Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+:sig) [a]
+    continue :: q -> es -> Free (TransformerE ts es (Free (CPSolve OvertonFD :+: sig) a) :+: sig) [a]
     continue q es
       | nullQ q = pure []
       | otherwise = do
           let ((ts,tree,label), q') = popQ q
-          _ <- wrapF @solver (goto label)
-          nextT tree ts es (\tree' ts' es' -> go ts' es' q' tree')
+          Effects.Lift.goto label $ \_ ->
+            nextT tree ts es (\tree' ts' es' -> go ts' es' q' tree')
 
 propagateConstraints :: forall solver a. (Solver solver) => Free (solver :+: Void) [a] -> solver [a]
 propagateConstraints = go . unitr
@@ -92,14 +94,14 @@ allDbs depthLimit queue model = go queue model 0 ()
       Free sig [a]
     go q (Pure a) _depth u = (a :) <$> continue q (id u)
     go q (l :|: r) depth u = do 
-      now <- wrapF mark 
+      now <- wrapF Solver.mark 
       continue (pushQ (succ depth, l, now) $ pushQ (succ depth, r, now) q) u
     go q Fail _depth u = continue q u
     go q (NewVar k) depth u = do 
-      v <- wrapF @solver newvar 
+      v <- wrapF @solver Solver.newvar 
       go q (k v) depth u
     go q (Add c k) depth u = do 
-      successful <- wrapF @solver (addCons c)
+      successful <- wrapF @solver (Solver.addCons c)
       if successful then go q k depth u else go q fail depth u
     go q (Dynamic k) depth u = do 
       term <- wrapF @solver k
@@ -110,32 +112,30 @@ allDbs depthLimit queue model = go queue model 0 ()
       | nullQ q = pure []
       | otherwise = do
           let ((depth, tree, label), q') = popQ q
-          wrapF @solver (goto label)
+          wrapF @solver (Solver.goto label)
           let (depth', u', tree') = (id depth, id u, if depth <= depthLimit then tree else fail)
           go q' tree' depth' u'
 
-type CTransformer' ts es =
-  forall a tsRest esRest solver sig. (Functor sig, Solver solver, solver `Sub` sig) =>
-  Free (TransformerE (ts, tsRest) (es, esRest) (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a] ->
-  Free (TransformerE tsRest esRest (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
+type CTransformer' ts es a tsRest esRest solver sig =
+  (Functor sig, Solver solver, Solv solver `Sub` sig,
+    CPSolve solver `Sub` sig, NonDet `Sub` sig) =>
+  Free (TransformerE (ts, tsRest) (es, esRest) (Free sig a) :+: sig) [a] ->
+  Free (TransformerE tsRest esRest (Free sig a) :+: sig) [a]
 
 makeT' ::
-  forall ts es a tsRest esRest sig solver.
-  (Functor sig, Solver solver, solver `Sub` sig) =>
+  forall solver ts es a sig tsRest esRest.
+  (Functor sig, Solver solver, Solv solver `Sub` sig, NonDet `Sub` sig, CPSolve solver `Sub` sig) =>
   ts ->
   es ->
   (es -> es) ->
   (ts -> ts) ->
   (ts -> ts) ->
-  (ts -> es -> Free (CPSolve solver :+: NonDet :+: sig) a -> (ts, es, Free (CPSolve solver :+: NonDet :+: sig) a)) ->
-  ( Free (TransformerE (ts, tsRest) (es, esRest) (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a] ->
-    Free (TransformerE tsRest esRest (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
-  )
+  (ts -> es -> Free sig a -> (ts, es, Free sig a)) ->
+  CTransformer' ts es a tsRest esRest solver sig
 makeT' tsInit esInit solEs leftTs rightTs nextState = go
   where
-    go ::
-      Free (TransformerE (ts, tsRest) (es, esRest) (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a] ->
-      Free (TransformerE tsRest esRest (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
+    go :: Free (TransformerE (ts, tsRest) (es, esRest) (Free sig a) :+: sig) [a] ->
+      Free (TransformerE tsRest esRest (Free sig a) :+: sig) [a]
     go (InitT k) = initT (\tsRest esRest -> go $ k (tsInit, tsRest) (esInit, esRest))
     go (SolT (es, esRest) k) = solT esRest (\esRest' -> go $ k (solEs es, esRest'))
     go (LeftT (ts, tsRest) k) = leftT tsRest (\tsRest' -> go $ k (leftTs ts, tsRest'))
@@ -146,32 +146,32 @@ makeT' tsInit esInit solEs leftTs rightTs nextState = go
     go (Pure a) = pure a
     go (Other op) = wrap $ Inr (go <$> op)
 
-dbs' :: Int -> CTransformer' Int ()
+
+destroyNonDet :: (Functor sig) => Free (NonDet :+: sig) a -> Free sig a 
+destroyNonDet (Pure a) = pure a 
+destroyNonDet (Free f) = case f of 
+  Inl _  -> undefined 
+  Inr fr -> Free $ destroyNonDet <$> fr
 dbs' depthLimit = makeT' 0 () id succ succ (\depth _ tree -> (depth, (), if depth <= depthLimit then tree else fail))
 
-fs' :: CTransformer' () Bool
-fs' = makeT'
-    ()
-    True
-    (const False)
-    id
-    id
-    (\_ keepGoing tree -> if keepGoing then ((), keepGoing, tree) else ((), keepGoing, fail))
+fs' :: forall a tsRest esRest solver sig. 
+  (Functor sig, Solver solver, Solv solver `Sub` sig, NonDet `Sub` sig, CPSolve solver `Sub` sig) =>
+  CTransformer' () Bool a tsRest esRest solver sig
+fs' = makeT' @solver () True (const False) id id
+    (\_ keepGoing tree -> ((), keepGoing, if keepGoing then tree else fail))
 
-testSolver :: (Solver solver) => Free (CPSolve solver :+: NonDet :+: solver :+: Void) a -> [a]
-testSolver model = run . propagateConstraints . it . (solve []) $ model
+testSolver :: CSP a -> [a]
+testSolver model = runSolver . destroyNonDet . it . (solve []) $ model
 
-testSolverDbs :: (Solver solver) => Int -> Free (CPSolve solver :+: NonDet :+: solver :+: Void) a -> [a]
-testSolverDbs depth model = run . propagateConstraints . it . (dbs' depth) . (solve (emptyQ :: Seq a)) $ model
+-- testSolverDbs depth model = run . propagateConstraints . it . (dbs' depth) . (solve (emptyQ :: Seq a)) $ model
 
-testSolverFs :: (Solver solver) => Free (CPSolve solver :+: NonDet :+: solver :+: Void) a -> [a]
-testSolverFs model = run . propagateConstraints . it . fs' . (solve []) $ model
+-- testSolverFs model = run . propagateConstraints . it . fs' . (solve []) $ model
 
 testAllDbs depth model = run . propagateConstraints . (allDbs depth []) $ model
 
 -- -------| MODIFIED QUEENS
 
-type CSP = Free (CPSolve OvertonFD :+: NonDet :+: OvertonFD :+: Void)
+type CSP = Free (CPSolve OvertonFD :+: NonDet :+: Solv OvertonFD :+: Void)
 
 nqueens :: Int -> CSP [Int]
 nqueens n = exist @OvertonFD n $ \queens -> model queens n /\ enumerate queens /\ assignments queens
@@ -213,7 +213,7 @@ true = pure ()
 
 -- -----------------------| Labelling |------------------------
 
-enumerate :: [FDVar] -> Free      (CPSolve OvertonFD :+: (NonDet :+: (OvertonFD :+: Void))) ()
+enumerate :: [FDVar] -> CSP ()
 enumerate vs = dynamic (label firstfail id vs)
 
 label :: ([FDVar] -> OvertonFD [FDVar]) -> ([Int] -> [Int]) ->
@@ -252,15 +252,3 @@ assignment q = dynamic $ do
   let v = head d
   pure $ pure v
 
--- ----------------------| Knapsack |------------------------
-
-knapsack :: Int -> [Int] -> Free (NonDet :+: Void) [Int]
-knapsack w vs
-  | w < 0  = fail
-  | w == 0 = pure []
-  | otherwise  = do
-    v <- select vs
-    vs' <- knapsack (w-v) vs
-    pure (v:vs')
-  where
-    select = foldr (try . pure) fail

@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
-module Experiments.CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse, testDbsNotReallyCPS, testDbsSlightlyCPS) where
+module Experiments.CombinedHandlers (testNbsAfterDbs, nbsAfterDbsTraverseQ, testDbsTraverse, testNbsAfterDbsTraverse, testDbsNotReallyCPS, testDbsSlightlyCPS, exampleT, testFusedExample) where
 
 import Effects.CPSolve
 import Control.Monad.Free
@@ -18,6 +18,7 @@ import Queues
 import Solver
 import Effects.Transformer
 import Prelude hiding (fail)
+import System.Random
 
 -- should have the same semantics as `it . dbs`
 dbsOnly ::
@@ -233,3 +234,30 @@ dbsSlightlyCPS depthLimit queue model = go queue model 0 () id -- init happens i
 testDbsSlightlyCPS :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testDbsSlightlyCPS depth model = run $ runEffects . (dbsSlightlyCPS depth []) <$> eval model
 
+exampleT :: forall sig a q.
+  (Queue q, Elem q ~ (Int, Free (NonDet :+: sig) a), Functor sig) =>
+  Int ->
+  Int -> 
+  Int ->
+  q ->
+  Free (NonDet :+: sig) a ->
+  Free sig [a]
+exampleT nodeLimit seed depthLimit = go 0 (randoms $ mkStdGen seed , 0) 
+  where 
+    go :: Int -> ([Bool], Int) -> q -> Free (NonDet :+: sig) a -> Free sig [a]
+    go ts es q (Pure a) = (a:) <$> continue es q 
+    go ts es q (l :|: r) = continue es $ pushQ (ts + 1, l) $ pushQ (ts + 1, r) q 
+    go ts es q Fail = continue es q 
+
+    continue :: ([Bool], Int) -> q -> Free sig [a]
+    continue es q 
+      | nullQ q = pure []
+      | otherwise = 
+        let ((depth, tree), q') = popQ q 
+            (coins, nodes) = es 
+            tree' = if head coins then flipT tree else tree
+          in go depth (tail coins, nodes + 1) q' 
+            (if depth <= depthLimit && nodes <= nodeLimit then tree' else fail)
+
+testFusedExample :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testFusedExample model = run $ runEffects . (exampleT 1500 300 15 []) <$> eval model

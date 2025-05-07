@@ -8,6 +8,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DeriveTraversable #-}
 module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr, wrapF, wrapFree)
 where
 import Control.Monad.Free (Free(..), MonadFree (wrap))
@@ -16,11 +18,21 @@ import Control.Monad.Free (Free(..), MonadFree (wrap))
 data (sig1 :+: sig2) cnt = Inl (sig1 cnt) | Inr (sig2 cnt)
 infixr 7 :+:
 
-
 instance (Functor sig1, Functor sig2) => Functor (sig1 :+: sig2) where
   fmap f (Inl s1) = Inl (fmap f s1)
   fmap f (Inr s2) = Inr (fmap f s2)
 
+instance (Foldable sig1, Foldable sig2) => Foldable (sig1 :+: sig2) where 
+  foldMap :: (Foldable sig1, Foldable sig2, Monoid m) =>
+    (a -> m) -> (:+:) sig1 sig2 a -> m
+  foldMap f (Inl s1) = foldMap f s1 
+  foldMap f (Inr s2) = foldMap f s2
+
+instance (Traversable sig1, Traversable sig2) => Traversable (sig1 :+: sig2) where
+  traverse :: (Traversable sig1, Traversable sig2, Applicative f) =>
+    (a -> f b) -> (:+:) sig1 sig2 a -> f ((:+:) sig1 sig2 b)
+  traverse f (Inl s1) = Inl <$> traverse f s1
+  traverse f (Inr s2) = Inr <$> traverse f s2
 
 class (Functor sub, Functor sup) => sub `Sub` sup where
   inj  :: sub a -> sup a
@@ -29,7 +41,7 @@ class (Functor sub, Functor sup) => sub `Sub` sup where
 
 
 
-instance Functor sig => sig `Sub` sig where
+instance {-# OVERLAPPING #-} Functor sig => sig `Sub` sig where
   inj = id
   prj = Just
 
@@ -40,17 +52,20 @@ instance  {-# OVERLAPS #-}
   prj (Inl fa) = Just fa
   prj _        = Nothing
 
+
 instance {-# INCOHERENT #-}
   (Functor (f a), Functor sig2, a ~ b) => f b `Sub` (f a :+: sig2) where 
     inj = Inl 
     prj (Inl fa) = Just fa
     prj _ = Nothing
 
+
 instance {-# INCOHERENT #-}
   (Functor (f a b c), Functor sig2, a ~ x, b ~ y, c ~ z) => f x y z `Sub` (f a b c :+: sig2) where 
     inj = Inl 
     prj (Inl fa) = Just fa
     prj _ = Nothing
+
 
 
 
@@ -61,8 +76,13 @@ instance {-# OVERLAPPABLE #-}
   prj _        = Nothing
 
 
+
+
 inject :: (sub `Sub` sup) => sub (Free sup a) -> Free sup a
 inject = Free . inj
+
+wrapF :: (sub `Sub` sup) => sub a -> Free sup a
+wrapF = Free . inj . (pure <$>)
 
 project :: (sub `Sub` sup) => Free sup a -> Maybe (sub (Free sup a))
 project (Free s) = prj s
@@ -82,7 +102,7 @@ getLUnsafe :: (sig1 :+: sig2) a -> sig1 a
 getLUnsafe (Inl a) = a 
 
 
-data Void cnt deriving Functor
+data Void cnt deriving (Functor, Foldable, Traversable)
 
 runEffects :: Free Void a -> a
 runEffects (Pure x) = x
@@ -92,8 +112,8 @@ unitr :: Functor sig => Free (sig :+: Void) a -> Free sig a
 unitr (Pure a) = pure a 
 unitr (Free sig) = wrap $ unitr <$> getLUnsafe sig
 
-wrapF :: m `Sub` sig => m a -> Free sig a 
-wrapF m = wrap . inj $ pure <$> m
+-- wrapF :: m `Sub` sig => m a -> Free sig a 
+-- wrapF m = wrap . inj $ pure <$> m
 
 wrapFree :: forall sub sup a. sub `Sub` sup => sub (Free sup a) -> Free sup a 
 wrapFree msig = wrap $ inj @sub @sup msig

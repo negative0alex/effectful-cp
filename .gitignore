@@ -27,3 +27,4 @@ benchmark*
 *.svg
 flamegraphs
 memory-profiling
+saved-benchmarks

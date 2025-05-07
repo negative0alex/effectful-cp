@@ -21,7 +21,7 @@ import Effects.NonDet (try, fail, NonDet)
 type CSP = Free (CPSolve OvertonFD :+: NonDet :+: Void)
 
 nqueens :: Int -> CSP [Int]
-nqueens n = exist @OvertonFD n $ \queens -> model queens n /\ enumerate queens /\ assignments queens
+nqueens n = exist n $ \queens -> model queens n /\ enumerate queens /\ assignments queens
 
 model :: [FDVar] -> Int -> CSP ()
 model queens n = queens `allin` (1,n) /\ alldifferent queens /\ diagonals queens
@@ -39,14 +39,11 @@ diagonals queens = conj [ (qi @\== (qj @+ d)) /\ (qj @\== (qi @+ d)) | qi : qjs 
 enum :: FDVar -> [Int] -> CSP ()
 enum var values = disj [ var @= value | value <- values ]
 
-disj :: [CSP ()] -> CSP ()
-disj = foldl (\/) false
-
-conj :: [CSP ()] -> CSP ()
-conj = foldl (/\) true
-
 (\/) :: CSP a -> CSP a -> CSP a
 (\/) = try
+
+(/\) :: CSP a -> CSP b -> CSP b
+(/\) = (>>)
 
 false :: CSP a
 false = fail
@@ -54,8 +51,11 @@ false = fail
 true :: CSP ()
 true = pure ()
 
-(/\) :: CSP a -> CSP b -> CSP b
-(/\) = (>>)
+disj :: [CSP ()] -> CSP ()
+disj = foldl (\/) false
+
+conj :: [CSP ()] -> CSP ()
+conj = foldl (/\) true
 
 
 -- -----------------------| Labelling |------------------------

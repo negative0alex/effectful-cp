@@ -64,6 +64,7 @@ library
                     , Effects.NonDet 
                     , Effects.CPSolve
                     , Effects.Transformer
+                    , Effects.Lift
                     , Effects.Core
                     , Staging.Handlers
                     , Staging.Staging
