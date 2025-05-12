@@ -79,3 +79,15 @@ testStagedDbsNbsLdsOpt :: Solver solver => Free (CPSolve solver :+: (NonDet :+: 
 testStagedDbsNbsLdsOpt = testStaged stagedDfsDbsNbsLdsOpt
 
 -- ---------------------------------
+
+example :: Free (NonDet :+: Void) a -> Free Void [a]
+example = $$(stagedBigExample) []
+
+testExample :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testExample = testStaged example
+
+example' :: Free (NonDet :+: Void) a -> Free Void [a]
+example' = $$(Staging.Optimisation.exampleBig') []
+
+testExample' :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testExample' = testStaged Staging.Staging.example'

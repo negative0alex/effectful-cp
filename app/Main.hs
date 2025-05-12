@@ -37,6 +37,9 @@ main = do
             Staging.testStagedDbsNbsOpt $ Queens.nqueens queens else []
         "staged_lds_nbs_dbs_opt" -> if depth == 25 && nodes == 500000 && disc == 5000000 then 
             Staging.testStagedDbsNbsLdsOpt $ Queens.nqueens queens else []
+        "example_h" -> Handlers.testBigExample (Queens.nqueens queens)
+        "example_s" -> Staging.testExample (Queens.nqueens queens) 
+        "example_o" -> Staging.testExample' (Queens.nqueens queens)
         _ -> []
   print $ length sols
   

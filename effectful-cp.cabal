@@ -65,10 +65,15 @@ library
                     , Effects.CPSolve
                     , Effects.Transformer
                     , Effects.Lift
+                    , Effects.Comb
                     , Effects.Core
                     , Staging.Handlers
                     , Staging.Staging
                     , Staging.Optimisation
+                    , Staging.IncrementalOptimisation1
+                    , Staging.IncrementalOptimisation2
+                    , Staging.IncrementalOptimisation3
+                    , Staging.IncrementalOptimisation4
                     , Experiments.HandlersExperiment
                     , Experiments.CombinedHandlers
 

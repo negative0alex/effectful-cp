@@ -166,11 +166,16 @@ randC seed = makeT () (randoms $ mkStdGen seed) id id id
 
 ----------------------------------- Testing
 
-testExample :: Solver solver => Int -> Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
-testExample depth nodes model = run $ runEffects . it . (nbsC nodes) . (randC 300) . (dbsC depth) . (traverseQ []) <$> eval model
+testExample :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testExample model = run $ runEffects . it . (nbsC 1500) . (randC 300) . (dbsC 15) . (traverseQ []) <$> eval model
+
+testBigExample :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
+testBigExample model = run $ runEffects . it . (nbsC 18000) . (randC 300) . (dbsC 25) . (traverseQ []) <$> eval model
 
 -- λ| length $ testExample 15 1500 (nqueens 8)
 -- 31
+
+-- big example : 10 queens, nodes 18000, seed 300, depth 25
 
 
 testRand :: (Solver solver) => Int -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]

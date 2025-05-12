@@ -28,6 +28,8 @@ import Effects.NonDet
 import Staging.Handlers (rec2, codeCurry)
 import Prelude hiding (fail)
 import Queues (Queue, Elem, pushQ, nullQ, popQ)
+import System.Random
+import Handlers (flipT)
 
 showCode :: Code Q a -> IO ()
 showCode code = do expr <- runQ (unTypeCode (code))
@@ -36,14 +38,6 @@ showCode code = do expr <- runQ (unTypeCode (code))
 data Rep :: Type -> Type where
    Pair :: Rep a -> Rep b -> Rep (a, b)
    Dyn  :: Code Q a -> Rep a   
-
-fstP :: Rep (a, b) -> Rep a
-fstP (Pair l _) = l
-fstP (Dyn p) = Dyn [|| fst $$p ||]
-
-sndP :: Rep (a, b) -> Rep b
-sndP (Pair _ r) = r
-sndP (Dyn p) = Dyn [|| snd  $$p ||]
 
 dynP :: Rep a -> Code Q a
 dynP (Pair l r) = [|| ($$(dynP l), $$(dynP r)) ||]
@@ -151,8 +145,8 @@ dbsTrans' depthLimit = SearchTransformer'
   { tsInit' = Dyn [||0||] 
   , esInit' = Dyn [||()||] 
   , solEs' = IdState
-  , leftTs' = Cont2 $ \ts k -> k (Dyn [|| succ $$(dynP ts) ||]) ts
-  , rightTs' = Cont $ \ts k -> k $ Dyn [|| succ $$(dynP ts) ||]
+  , leftTs' = Cont2 $ \ts k -> k (Dyn [|| $$(dynP ts) + 1 ||]) ts
+  , rightTs' = Cont $ \ts k -> k $ Dyn [|| $$(dynP ts) + 1 ||]
   , nextState' = NoneT $ \ts _ tree k -> k $ Dyn [|| if $$(dynP ts) <= depthLimit then $$(dynP tree) else fail ||]
   }
 
@@ -164,7 +158,7 @@ nbsTrans' nodeLimit =
     , solEs' = IdState
     , leftTs' = IdState2
     , rightTs' = IdState
-    , nextState' = OnlyEsT $ \_ es tree k -> k (Dyn [|| succ $$(dynP es) ||]) 
+    , nextState' = OnlyEsT $ \_ es tree k -> k (Dyn [|| $$(dynP es) + 1 ||]) 
       (Dyn [|| if $$(dynP es) <= nodeLimit then $$(dynP tree) else fail ||]) 
     }
 
@@ -178,6 +172,17 @@ ldsTrans' discLimit =
     , rightTs' = Cont $ \ts k -> k $ Dyn [|| succ $$(dynP ts) ||] 
     , nextState' = NoneT $ \ts _ tree k -> k $ Dyn [|| if $$(dynP ts) <= discLimit then $$(dynP tree) else fail ||]
     }
+
+randTrans' :: Int -> SearchTransformer' () [Bool]
+randTrans' seed = SearchTransformer' 
+  { tsInit' = Dyn [|| () ||]
+  , esInit' = Dyn [|| randoms $ mkStdGen seed ||]
+  , solEs' = IdState 
+  , leftTs' = IdState2 
+  , rightTs' = IdState 
+  , nextState' = OnlyEsT $ \_ es tree k -> k (Dyn [|| tail $$(dynP es) ||])
+    (Dyn [|| let tree' = $$(dynP tree) in if head $$(dynP es) then flipT tree' else tree' ||])
+  }
 
 composeTrans'' :: forall ts1 ts2 es1 es2. (Pairable ts1 ts2, Pairable es1 es2) => 
   SearchTransformer' ts1 es1 -> SearchTransformer' ts2 es2 -> SearchTransformer' (Pair ts1 ts2) (Pair es1 es2)
@@ -353,3 +358,15 @@ dbsNbsLdsTrans'' = composeTrans'' dbsNbsTrans'' ldsTrans5000000'
 
 dbsNbsLds' :: Code Q ([((Int, Int), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 dbsNbsLds' = stage2 dbsNbsLdsTrans''
+
+exampleTrans' :: SearchTransformer' Int ([Bool], Int)
+exampleTrans' = composeTrans'' (composeTrans'' (dbsTrans' 15) (randTrans' 300)) (nbsTrans' 1500)
+
+example' :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+example' = stage2 exampleTrans'
+
+exampleBigTrans' :: SearchTransformer' Int ([Bool], Int)
+exampleBigTrans' = composeTrans'' (composeTrans'' (dbsTrans' 25) (randTrans' 300)) (nbsTrans' 18000)
+
+exampleBig' :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+exampleBig' = stage2 exampleBigTrans'

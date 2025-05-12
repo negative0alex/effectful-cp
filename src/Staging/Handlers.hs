@@ -52,8 +52,8 @@ dbsTrans depthLimit =
     { tsInit = [||0||],
       esInit = [||()||],
       solEs = id,
-      leftTs = \ts -> [|| succ $$ts ||],
-      rightTs = \ts -> [|| succ $$ts ||],
+      leftTs = \ts -> [|| $$ts + 1 ||],
+      rightTs = \ts -> [|| $$ts + 1 ||],
       nextState = \ts es model -> (ts, es, [|| if $$ts <= depthLimit then $$model else fail||])
     }
 
@@ -65,7 +65,7 @@ nbsTrans nodeLimit =
     , solEs = id
     , leftTs = id
     , rightTs = id
-    , nextState = \ts es model -> (ts, [|| succ $$es ||], [||if $$es <= nodeLimit then $$model else fail||])
+    , nextState = \ts es model -> (ts, [|| $$es + 1 ||], [||if $$es <= nodeLimit then $$model else fail||])
     }
 
 ldsTrans :: Int -> SearchTransformer Int ()
@@ -122,6 +122,9 @@ dbsNbsLdsTrans = composeTrans dbsNbsTrans ldsTrans5000000
 stagedDbs25 :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 stagedDbs25 = stage1 dbsTrans25 
 
+stagedDbs15 :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedDbs15 = stage1 (dbsTrans 15)
+
 stagedDbsNbs :: Code Q ([((Int, ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 stagedDbsNbs = stage1 dbsNbsTrans
 
@@ -132,12 +135,12 @@ stage1 :: forall q ts es a. (Queue q, Elem q ~ (ts, Free (NonDet :+: Void) a)) =
   SearchTransformer ts es -> 
   Code Q (q -> Free (NonDet :+: Void) a -> Free Void [a])
 stage1 (SearchTransformer tsInit esInit solEs leftTs rightTs nextState) = rec2 
-  (\(_, continue) -> codeCurry $ \tsc -> codeCurry $ \esc -> 
+  (\(_, continue) ->  
     [||
-    \q tree -> case tree of 
-      Pure a -> (a:) <$> $$continue $$(solEs esc) q
-      l :|: r -> $$continue $$esc (pushQ ($$(leftTs tsc), l) $ pushQ ($$(rightTs tsc), r) q) 
-      Fail -> $$continue $$esc q
+    \ts es q tree -> case tree of 
+      Pure a -> (a:) <$> $$continue $$(solEs [|| es ||]) q
+      l :|: r -> $$continue es (pushQ ($$(leftTs [|| ts ||]), l) $ pushQ ($$(rightTs [|| ts ||]), r) q) 
+      Fail -> $$continue es q
     ||]
     )
   (\(go, _) -> [||
@@ -174,10 +177,22 @@ composeTrans t1 t2 =
                                    (ts1', es1', tree') = nextState t1 ts1 es1 tree
                                    (ts2', es2', tree'') = nextState t2 ts2 es2 tree'
                                   in  
-                                    ([|| ($$ts1', $$ts2') ||], [|| ($$es1', $$es2') ||], tree'')
+                                   ([|| ($$ts1', $$ts2') ||], [|| ($$es1', $$es2') ||], tree'')
 }
 
+-- ------------------------------------------
 
+exampleTrans :: SearchTransformer ((Int, ()), ()) (((), [Bool]), Int)
+exampleTrans = composeTrans (composeTrans (dbsTrans 15) (randTrans 300)) (nbsTrans 1500)
+
+stagedExample :: Code Q ([(((Int, ()), ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedExample = stage1 exampleTrans
+
+exampleBigTrans :: SearchTransformer ((Int, ()), ()) (((), [Bool]), Int)
+exampleBigTrans = composeTrans (composeTrans (dbsTrans 25) (randTrans 300)) (nbsTrans 18000)
+
+stagedBigExample :: Code Q ([(((Int, ()), ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedBigExample = stage1 exampleBigTrans
 -- ------------------------------------------
 
 
