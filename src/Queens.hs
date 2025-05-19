@@ -41,9 +41,11 @@ enum var values = disj [ var @= value | value <- values ]
 
 (\/) :: CSP a -> CSP a -> CSP a
 (\/) = try
+infixl 2 \/
 
 (/\) :: CSP a -> CSP b -> CSP b
 (/\) = (>>)
+infixl 3 /\
 
 false :: CSP a
 false = fail
@@ -51,7 +53,7 @@ false = fail
 true :: CSP ()
 true = pure ()
 
-disj :: [CSP ()] -> CSP ()
+disj :: [CSP a] -> CSP a
 disj = foldl (\/) false
 
 conj :: [CSP ()] -> CSP ()

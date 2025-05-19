@@ -17,7 +17,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
 module Staging.Optimisation where
 import Data.Kind
@@ -187,8 +186,8 @@ randTrans' seed = SearchTransformer'
 composeTrans'' :: forall ts1 ts2 es1 es2. (Pairable ts1 ts2, Pairable es1 es2) => 
   SearchTransformer' ts1 es1 -> SearchTransformer' ts2 es2 -> SearchTransformer' (Pair ts1 ts2) (Pair es1 es2)
 composeTrans'' t1 t2 = 
-  let caseT = pairCase @ts1 @ts2 
-      caseE = pairCase @es1 @es2
+  let caseT = pairCase  
+      caseE = pairCase
     in 
       SearchTransformer' 
       { tsInit' = case caseT of  
@@ -231,12 +230,8 @@ composeTrans'' t1 t2 =
           RightC injR projR _ -> (rightTs' t2) &>< (injR, projR)
           BothC injB projB -> case (rightTs' t1, rightTs' t2) of 
             (IdState, IdState) -> IdState
-            (stl, str) -> Cont $ \ts k ->
-                          let kl = getCont stl 
-                              kr = getCont str 
-                              tsK = projB ts
-                            in 
-                              tsK $ \tsL tsR -> (kl tsL) $ \tsL' -> (kr tsR) $ \tsR' -> k (injB tsL' tsR')
+            (f1, f2) -> Cont $ \ts k -> projB ts $ \tsL tsR -> 
+              (getCont f1 tsL) $ \tsL' -> (getCont f2 tsR) $ \tsR' -> k $ injB tsL' tsR'
 
       , nextState' = case (nextState' t1, nextState' t2) of 
         -- both get identity

@@ -61,12 +61,13 @@ library
     exposed-modules:  Handlers
                     , Solver
                     , Queens
+                    , BranchAndBound
                     , Effects.NonDet 
                     , Effects.CPSolve
                     , Effects.Transformer
-                    , Effects.Lift
                     , Effects.Comb
                     , Effects.Core
+                    , Effects.State
                     , Staging.Handlers
                     , Staging.Staging
                     , Staging.Optimisation
@@ -74,7 +75,6 @@ library
                     , Staging.IncrementalOptimisation2
                     , Staging.IncrementalOptimisation3
                     , Staging.IncrementalOptimisation4
-                    , Experiments.HandlersExperiment
                     , Experiments.CombinedHandlers
 
     -- Modules included in this library but not exported.

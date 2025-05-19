@@ -204,3 +204,8 @@ rec2 mk1 mk2 mkk = [|| let f = $$(mk1 ([|| f ||], [|| g ||]))
                           in $$(mkk ([|| f ||], [|| g ||])) ||]
 
  
+three :: Code Q Int 
+three = [|| 3 ||]
+
+two_plus_three :: Code Q Int 
+two_plus_three = [|| 2 + $$three ||]

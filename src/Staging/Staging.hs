@@ -17,6 +17,7 @@ import Solver
 import Prelude hiding (fail)
 import Staging.Handlers
 import Staging.Optimisation
+import Language.Haskell.TH
 
 testStaged :: Solver solver => 
   (Free (NonDet :+: Void) a -> Free Void [a]) -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
@@ -91,3 +92,21 @@ example' = $$(Staging.Optimisation.exampleBig') []
 
 testExample' :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testExample' = testStaged Staging.Staging.example'
+
+----
+
+square :: Num a => a -> a
+square x = x * x 
+
+five :: Int 
+five = $$two_plus_three
+
+powern :: Integer -> Code Q Integer -> Code Q Integer 
+powern pow x
+  | pow == 0 = [|| 1 ||]
+  | pow == 1 = x
+  | pow `mod` 2 == 0 = [|| square $$(powern (pow `div` 2) x) ||]
+  | otherwise = [|| $$x * $$(powern (pow - 1) x) ||]
+
+power :: Integer -> CodeQ (Integer -> Integer)
+power = \pow -> codeCurry $ powern pow

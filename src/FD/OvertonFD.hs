@@ -64,6 +64,8 @@ data OConstraint =
   | OAbs FDVar FDVar -- no
   | OInDom FDVar (Int, Int) -- yes
   | OPlusNeq FDVar FDVar Int
+  | OLtConst FDVar Int
+  | OGtConst FDVar Int
   deriving (Show,Eq)
 
 instance Solver OvertonFD where
@@ -116,9 +118,8 @@ addOverton (OInDom a r) = do
     if not (Domain.null d') then update a d' 
     else return False
 addOverton (OPlusNeq a b n) = undefined
-
-
-
+addOverton (OLtConst var c) = var .< c
+addOverton (OGtConst var c) = var .> c
 
 
 fd_domain :: FDVar -> OvertonFD [Int]
@@ -252,6 +253,20 @@ var `hasValue` val = do
                   else return True
        else return False
 
+infix 4 .<
+(.<) :: FDVar -> Int -> OvertonFD Bool 
+(.<) var top = do 
+    vals <- lookup var 
+    let vals' = filterLessThan top vals 
+    if not (Domain.null vals') then (if vals' /= vals then update var vals' else return True) else return False
+
+infix 4 .>
+(.>) :: FDVar -> Int -> OvertonFD Bool 
+(.>) var top = do 
+    vals <- lookup var 
+    let vals' = filterGreaterThan top vals 
+    if not (Domain.null vals') then (if vals' /= vals then update var vals' else return True) else return False
+
 -- Constrain two variables to have the same value.
 same :: FDVar -> FDVar -> OvertonFD Bool
 same = addBinaryConstraint $ \x y -> do
@@ -301,6 +316,8 @@ infix 4 .<.
                 then whenwhen (xv /= xv') (yv /= yv') (update x xv') (update y yv')
                 else return False
         else return False
+
+
 
 -- Constrain one variable to have a value less than or equal to the value of another 
 -- variable.

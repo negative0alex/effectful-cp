@@ -8,6 +8,7 @@ import qualified Handlers
 import qualified Queens
 import System.Environment (getArgs)
 import Staging.Staging as Staging
+import qualified Experiments.CombinedHandlers
 
 
 main :: IO ()
@@ -40,6 +41,9 @@ main = do
         "example_h" -> Handlers.testBigExample (Queens.nqueens queens)
         "example_s" -> Staging.testExample (Queens.nqueens queens) 
         "example_o" -> Staging.testExample' (Queens.nqueens queens)
+        "example_1" -> Handlers.testExampleIt (Queens.nqueens 10)
+        "example_2" -> Experiments.CombinedHandlers.testExampleTraverse (Queens.nqueens 10)
+        "example_3" -> Experiments.CombinedHandlers.testExampleEval (Queens.nqueens 10)
         _ -> []
   print $ length sols
   
