@@ -68,6 +68,7 @@ library
                     , Effects.Comb
                     , Effects.Core
                     , Effects.State
+                    , Effects.Solver
                     , Staging.Handlers
                     , Staging.Staging
                     , Staging.Optimisation

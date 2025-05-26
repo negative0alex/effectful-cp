@@ -37,6 +37,7 @@ eval (l :|: r) = do
   l' <- eval l
   goto now
   r' <- eval r
+  goto now
   pure $ try l' r'
 eval (Fail) = pure fail
 eval (Other f) = Free <$> traverse eval f
@@ -74,6 +75,7 @@ traverseQ queue model = initT (\tsInit esInit -> go queue model tsInit esInit)
               )
         )
     go q (Fail) _ es = continue q es
+    go q (Other op) ts es = Free . Inr $ (\t -> go q t ts es) <$> op
     continue :: q -> es -> Free (TransformerE ts es (Free (NonDet :+: sig) a) :+: sig) [a]
     continue q es
       | nullQ q = pure []

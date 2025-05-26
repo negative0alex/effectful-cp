@@ -40,6 +40,12 @@ program = do
   put (3 * v) 
   pure v
 
+program' :: Free (State Int) Int 
+program' = do 
+  v <- get 
+  put (3 * v)
+  pure v
+
 data Free' sig a = 
     Pure' a 
   | Free' (sig (Free' sig a))

@@ -10,7 +10,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveTraversable #-}
-module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr, wrapF, wrapFree, liftR)
+module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr, wrapF, wrapFree, liftR, pattern Other2)
 where
 import Control.Monad.Free (Free(..), MonadFree (wrap))
 
@@ -65,8 +65,6 @@ instance {-# INCOHERENT #-}
     prj _ = Nothing
 
 
-
-
 instance {-# OVERLAPPABLE #-}
   (Functor sig1, sig `Sub` sig2) => sig `Sub` (sig1 :+: sig2) where
   inj          = Inr . inj
@@ -118,6 +116,9 @@ wrapFree msig = wrap $ inj @sub @sup msig
 
 pattern Other :: sig2 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
 pattern Other s = Free (Inr s)
+
+pattern Other2 :: sig3 (Free (sig1 :+: sig2 :+: sig3) a) -> Free (sig1 :+: sig2 :+: sig3) a 
+pattern Other2 s = Free (Inr (Inr s))
 
 liftR :: (Functor sig1, Functor sig2) => Free sig1 a -> Free (sig2 :+: sig1) a 
 liftR (Pure a) = Pure a 

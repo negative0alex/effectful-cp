@@ -13,7 +13,7 @@ import Data.List (tails)
 import FD.OvertonFD as OvertonFD
 import FD.Domain as Domain
 import GHC.Exts (sortWith)
-import Effects.Core ((:+:), Void)
+import Effects.Core ((:+:), Void, Sub)
 import Effects.CPSolve (CPSolve, exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic)
 import Control.Monad.Free (Free)
 import Effects.NonDet (try, fail, NonDet)
@@ -39,24 +39,24 @@ diagonals queens = conj [ (qi @\== (qj @+ d)) /\ (qj @\== (qi @+ d)) | qi : qjs 
 enum :: FDVar -> [Int] -> CSP ()
 enum var values = disj [ var @= value | value <- values ]
 
-(\/) :: CSP a -> CSP a -> CSP a
+(\/) :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a
 (\/) = try
 infixl 2 \/
 
-(/\) :: CSP a -> CSP b -> CSP b
+(/\) :: (NonDet `Sub` sig) => Free sig a -> Free sig b -> Free sig b
 (/\) = (>>)
 infixl 3 /\
 
-false :: CSP a
+false :: (NonDet `Sub` sig) => Free sig a
 false = fail
 
-true :: CSP ()
+true :: (Functor sig) => Free sig ()
 true = pure ()
 
-disj :: [CSP a] -> CSP a
+disj :: (NonDet `Sub` sig) => [Free sig a] -> Free sig a
 disj = foldl (\/) false
 
-conj :: [CSP ()] -> CSP ()
+conj :: (NonDet `Sub` sig) => [Free sig ()] -> Free sig ()
 conj = foldl (/\) true
 
 
