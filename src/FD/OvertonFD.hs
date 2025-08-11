@@ -47,6 +47,7 @@ import FD.Domain as Domain
 
 import FD.Debug
 import Solver (Solver (..))
+import Data.Numbers.Primes 
 
 --------------------------------------------------------------------------------
 -- Solver instance -------------------------------------------------------------
@@ -66,6 +67,7 @@ data OConstraint =
   | OPlusNeq FDVar FDVar Int
   | OLtConst FDVar Int
   | OGtConst FDVar Int
+  | OPrime FDVar
   deriving (Show,Eq)
 
 instance Solver OvertonFD where
@@ -120,6 +122,7 @@ addOverton (OInDom a r) = do
 addOverton (OPlusNeq a b n) = undefined
 addOverton (OLtConst var c) = var .< c
 addOverton (OGtConst var c) = var .> c
+addOverton (OPrime var) = onlyPrimes var
 
 
 fd_domain :: FDVar -> OvertonFD [Int]
@@ -253,6 +256,11 @@ var `hasValue` val = do
                   else return True
        else return False
 
+onlyPrimes :: FDVar -> OvertonFD Bool 
+onlyPrimes var = do 
+    vals <- lookup var 
+    let vals' = filterPredicate isPrime vals
+    if not (Domain.null vals') then (if vals' /= vals then update var vals' else return True) else return False
 infix 4 .<
 (.<) :: FDVar -> Int -> OvertonFD Bool 
 (.<) var top = do 

@@ -18,6 +18,8 @@ import Prelude hiding (fail)
 import Staging.Handlers
 import Staging.Optimisation
 import Language.Haskell.TH
+import qualified Staging.Handlers as Staging
+import Queens (nqueens)
 
 testStaged :: Solver solver => 
   (Free (NonDet :+: Void) a -> Free Void [a]) -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
@@ -92,6 +94,12 @@ example' = $$(Staging.Optimisation.exampleBig') []
 
 testExample' :: Solver solver => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testExample' = testStaged Staging.Staging.example'
+
+veryBigStaged :: [[Int]]
+veryBigStaged = testStaged ($$(Staging.stagedVeryBigExample) []) (nqueens 12)
+
+veryBigOptimised :: [[Int]]
+veryBigOptimised = testStaged ($$(Staging.Optimisation.exampleVeryBig') []) (nqueens 12)
 
 ----
 

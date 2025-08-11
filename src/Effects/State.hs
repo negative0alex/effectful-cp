@@ -34,7 +34,7 @@ runState' s (Pure a) = (s, a)
 runState' s (Get k) = runState' s (k s)
 runState' _ (Put s' k) = runState' s' k
 
-program :: Functor sig => Free (State Int :+: sig) Int 
+program :: (State Int `Sub` sig) => Free sig Int 
 program = do 
   v <- get
   put (3 * v) 

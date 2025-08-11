@@ -366,3 +366,9 @@ exampleBigTrans' = composeTrans'' (composeTrans'' (dbsTrans' 25) (randTrans' 300
 exampleBig' :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 exampleBig' = stage2 exampleBigTrans'
 
+exampleVeryBigTrans' :: SearchTransformer' Int ([Bool], Int)
+exampleVeryBigTrans' = composeTrans'' (composeTrans'' (dbsTrans' 32) (randTrans' 300)) (nbsTrans' 320000)
+
+exampleVeryBig' :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+exampleVeryBig' = stage2 exampleVeryBigTrans'
+

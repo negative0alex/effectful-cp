@@ -7,21 +7,22 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module BranchAndBound where
 
 import Control.Monad.Free (Free (..))
-import Effects.CPSolve (CPSolve, dynamic, exists, in_domain, (@<), (@>), pattern Add, pattern NewVar, pattern Dynamic)
-import Effects.Core (Void, liftR, runEffects, (:+:) (..), Sub, pattern Other2, pattern Other)
-import Effects.NonDet (NonDet (..), pattern (:|:), pattern Fail)
-import Effects.Transformer (TransformerE, initT, pattern InitT, pattern LeftT, pattern NextT, pattern RightT, pattern SolT, solT, leftT, rightT, nextT)
+import Effects.CPSolve (CPSolve, dynamic, exists, (@<), (@>), pattern Add, pattern Dynamic, pattern NewVar)
+import Effects.Core (Sub, (:+:) (..), pattern Other, pattern Other2)
+import Effects.NonDet (NonDet (..), fail, try, pattern Fail, pattern (:|:))
+import Effects.Solver (SolverE, solve, solveConstraints, runSolver)
+import Effects.Transformer (TransformerE, initT, leftT, nextT, rightT, solT, pattern InitT, pattern LeftT, pattern NextT, pattern RightT, pattern SolT)
 import FD.OvertonFD (OvertonFD, fd_domain, fd_objective)
-import Handlers (eval, randC, traverseQ, it)
+import Handlers (it, traverseQ)
 import Queens
 import Queues
 import Solver (Solver (..))
 import Prelude hiding (fail)
-import Effects.Solver (SolverE, solve, runSolver, solveConstraints)
 
 evalQ ::
   forall solver sig q a es ts.
@@ -31,44 +32,65 @@ evalQ ::
   Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
 evalQ queue model = initT (\ts es -> go queue model ts es)
   where
-    go :: q -> Free (CPSolve solver :+: NonDet :+: sig) a -> 
-      ts -> es -> Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
+    go ::
+      q ->
+      Free (CPSolve solver :+: NonDet :+: sig) a ->
+      ts ->
+      es ->
+      Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
     continue :: q -> es -> Free (TransformerE ts es (Free (CPSolve solver :+: NonDet :+: sig) a) :+: sig) [a]
     go q (Pure a) _ es = solT es (\es' -> (a :) <$> continue q es')
-    go q (l :|: r) ts es = do 
-      now <- solve @solver mark
-      leftT
-        ts
-        ( \ls ->
-            rightT
-              ts
-              ( \rs ->
-                  let q' = pushQ (now, ls, l) $ pushQ (now, rs, r) $ q
-                   in continue q' es
-              )
-        )
+    go q (l :|: r) ts es = do
+      now <- solve mark
+      leftT ts $ \ls -> rightT ts $ \rs ->
+        let q' = pushQ (now, ls, l) $ pushQ (now, rs, r) $ q
+         in continue q' es
     go q (Fail) _ es = continue q es
-    go q (Add c k) ts es = do 
+    go q (Add c k) ts es = do
       success <- solve @solver $ addCons c
       if success then go q k ts es else continue q es
-    go q (NewVar k) ts es = do 
-      var <- solve @solver $ newvar 
+    go q (NewVar k) ts es = do
+      var <- solve @solver $ newvar
       go q (k var) ts es
-    go q (Dynamic k) ts es = do 
+    go q (Dynamic k) ts es = do
       term <- solve @solver $ k
       go q term ts es
     go q (Other2 op) ts es = Free . Inr $ (\t -> go q t ts es) <$> op
-    
-    continue q es 
+
+    continue q es
       | nullQ q = pure []
-      | otherwise = 
-        let ((now, ts, tree), q') = popQ q in
-          do 
-            _ <- solve @solver $ goto now
-            nextT tree ts es (go q')
+      | otherwise =
+          let ((now, ts, tree), q') = popQ q
+           in do
+                _ <- solve @solver $ goto now
+                nextT tree ts es (go q')
 
 testDumb :: CSP' a -> [a]
 testDumb model = solveConstraints . it . (evalQ []) $ model
+
+eval2 ::
+  forall solver a sig.
+  (Solver solver, NonDet `Sub` sig, SolverE solver `Sub` sig) =>
+  Free (CPSolve solver :+: sig) a -> Free sig a
+eval2 (Pure a) = pure $ a
+eval2 (NewVar k) = do
+  v <- solve @solver newvar
+  eval2 (k v)
+eval2 (Add c k) = do
+  successful <- solve @solver $ addCons c
+  if successful then eval2 k else fail
+eval2 (Dynamic k) = do
+  k' <- solve @solver $ k
+  eval2 k'
+eval2 (l :|: r) = do
+  now <- solve @solver mark
+  let l' = (solve @solver $ goto now) >>= const (eval2 l)
+  let r' = (solve @solver $ goto now) >>= const (eval2 r)
+  try l' r'
+eval2 (Other f) = Free $ eval2 <$> f
+
+testDumb2 :: CSP' a -> [a]
+testDumb2 model = solveConstraints . it . (traverseQ []) . eval2 $ model
 
 type Bound solver a =
   Free (CPSolve solver :+: NonDet :+: SolverE solver) a ->
@@ -96,16 +118,16 @@ bb newBound = go
       go $ k (BBP (v + 1) bound')
     go (LeftT ts k) = go $ k ts
     go (RightT ts k) = go $ k ts
-    go (NextT tree v es@(BBP nv bound) k) = 
-      if nv > v 
-        then do 
-          let tree' = bound tree in 
-            go $ k tree' nv es
-      else go $ k tree v es
+    go (NextT tree v es@(BBP nv bound) k) =
+      if nv > v
+        then do
+          let tree' = bound tree
+           in go $ k tree' nv es
+        else go $ k tree v es
     go (Other op) = Free $ go <$> op
 
 bbSolve :: CSP' a -> [a]
-bbSolve model = solveConstraints . (bb newBound) . (evalQ []) $ model
+bbSolve model = run . runSolver . (bb newBound) . (evalQ []) $ model
 
 newBound :: forall a. NewBound OvertonFD a
 newBound = do
@@ -113,7 +135,6 @@ newBound = do
   dom <- fd_domain $ obj
   let val = head dom
   return ((\tree -> obj @< val /\ tree) :: Bound OvertonFD a)
-
 
 ----------------------------------------------------------
 

@@ -61,6 +61,7 @@ library
     exposed-modules:  Handlers
                     , Solver
                     , Queens
+                    , Queens2
                     , BranchAndBound
                     , Effects.NonDet 
                     , Effects.CPSolve
@@ -76,6 +77,9 @@ library
                     , Staging.IncrementalOptimisation2
                     , Staging.IncrementalOptimisation3
                     , Staging.IncrementalOptimisation4
+                    , Staging.IncrementalOptimisation5
+                    , Staging.IncrementalOptimisation6
+                    , Staging.Effectful
                     , Experiments.CombinedHandlers
 
     -- Modules included in this library but not exported.
@@ -96,6 +100,7 @@ library
                     , mtl
                     , template-haskell
                     , random
+                    , primes
 
     -- Directories containing source files.
     hs-source-dirs:   src

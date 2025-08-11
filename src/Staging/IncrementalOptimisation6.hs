@@ -19,7 +19,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
-module Staging.IncrementalOptimisation3 where
+module Staging.IncrementalOptimisation6 where
 import Data.Kind
 import Control.Monad.Free
 import Effects.Core
@@ -37,19 +37,28 @@ showCode :: Code Q a -> IO ()
 showCode code = do expr <- runQ (unTypeCode (code))
                    putStrLn (pprint expr)
 
-type Rep a = Code Q a
+data Rep :: Type -> Type where
+   Pair :: Rep a -> Rep b -> Rep (a, b)
+   Dyn  :: Code Q a -> Rep a   
+   Unit :: Rep ()
+  --  PairUL :: Rep a -> Rep ((), a)
+  --  PairUR :: Rep a -> Rep (a, ())
 
-fstP :: Rep (a,b) -> Rep a 
-fstP t = [|| fst $$t ||]
+dynP :: Rep a -> Code Q a
+dynP (Pair l r) = [|| ($$(dynP l), $$(dynP r)) ||]
+dynP (Dyn p) = p
+dynP Unit = [|| () ||]
 
-sndP :: Rep (a,b) -> Rep b 
-sndP t = [|| snd $$t ||]
+let_ :: Rep (a, b) -> ContRep (Rep a, Rep b)
+let_ (Pair l r) = pure (l, r)
+let_ (Dyn p) = R $ \k -> Dyn [|| let (a, b) = $$p in $$(dynP (curry k (Dyn [||a||]) (Dyn [||b||]))) ||]
+-- let_ (PairUL a) = R $ \k -> k (Unit, a) 
+-- let_ (PairUR a) = R $ \k -> k (a, Unit)
 
-pairP :: Rep a -> Rep b -> Rep (a,b)
-pairP a b = [|| ($$a, $$b) ||]
-
-let_ :: Rep (a,b) -> ContRep (Rep a, Rep b)
-let_ p = R $ \k -> [|| let (a,b) = $$p in $$(curry k [||a||] [||b||]) ||]
+pairP :: Rep a -> Rep b -> Rep (a, b)
+-- pairP a Unit = PairUR a 
+-- pairP Unit a = PairUL a
+pairP a b = Pair a b
 
 newtype ContRep s = R {r :: forall b. (s -> Rep b) -> Rep b}
 
@@ -72,16 +81,23 @@ data StateTransform state =
   IdState 
   | TransState (Rep state -> ContRep (Rep state))
 
--- extractCont :: StateTransform state -> Rep state -> (Rep state -> Rep b) -> Rep b
--- extractCont (IdState) = flip ($) 
--- extractCont (TransState f) = \s k -> r (f s) k
+data StateTransform2 state = 
+  IdState2
+  | TransState2 (Rep state -> ContRep (Rep state, Rep state))
 
 getCont :: StateTransform state -> Rep state -> ContRep (Rep state)
 getCont IdState = pure 
 getCont (TransState f) = f
 
+getCont2 :: StateTransform2 state -> Rep state -> ContRep (Rep state, Rep state)
+getCont2 IdState2 = pure . (\a -> (a,a))
+getCont2 (TransState2 f) = f
+
 mkTrans :: (Rep state -> Rep state) -> StateTransform state 
 mkTrans f = TransState $ \s -> pure (f s)
+
+mkTrans2 :: (Rep state -> Rep state) -> StateTransform2 state 
+mkTrans2 f = TransState2 $ \s -> pure (f s, s)
 
 newtype NextTransform ts es
   = NT ( forall a.
@@ -98,11 +114,6 @@ getNextTransform ::
   Rep (Free (NonDet :+: Void) a) ->
   ContRep (Rep ts, Rep es, Rep (Free (NonDet :+: Void) a))
 getNextTransform (NT f) = \ts es tree -> do
-  -- let (ts', es', tree') = (r f) ts es tree
-  --  in ( maybe ts id ts',
-  --       maybe es id es',
-  --       tree'
-  --     )
   (ts', es', tree') <- f ts es tree 
   pure (maybe ts id ts', maybe es id es', tree')
 
@@ -118,71 +129,101 @@ onlyEsT f = NT $ \ts es tree -> let (es', tree') = f ts es tree in pure (Nothing
 data SearchTransformer ts es = SearchTransformer 
   { tsInit :: Rep ts,
     esInit :: Rep es,
-    leftTs :: StateTransform ts,
+    leftTs :: StateTransform2 ts,
     rightTs :: StateTransform ts,
     nextState :: NextTransform ts es
   }
 
 dbsTrans' :: Int -> SearchTransformer Int () 
 dbsTrans' depthLimit = SearchTransformer 
-  { tsInit = [|| 0 ||]
-  , esInit = [|| () ||]
-  , leftTs = mkTrans $ \ts -> [|| $$ts + 1 ||]
-  , rightTs = mkTrans $ \ts -> [|| $$ts + 1 ||]
-  , nextState = noneT $ \ts _ tree -> [|| if $$ts <= depthLimit then $$tree else fail ||]
+  { tsInit = Dyn [|| 0 ||]
+  , esInit = Dyn [|| () ||]
+  , leftTs = mkTrans2 $ \ts -> Dyn [|| $$(dynP ts) + 1 ||]
+  , rightTs = mkTrans $ \ts -> Dyn [|| $$(dynP ts) + 1 ||]
+  , nextState = noneT $ \ts _ tree -> Dyn [|| if $$(dynP ts) <= depthLimit then $$(dynP tree) else fail ||]
   }
 
 nbsTrans' :: Int -> SearchTransformer () Int 
 nbsTrans' nodeLimit = 
   SearchTransformer
-    { tsInit = [|| () ||]
-    , esInit = [|| 0 ||]
-    , leftTs = IdState
+    { tsInit = Dyn [|| () ||]
+    , esInit = Dyn [|| 0 ||]
+    , leftTs = IdState2
     , rightTs = IdState
     , nextState = onlyEsT $ \_ es tree -> 
-      ([|| $$es + 1 ||], [|| if $$es <= nodeLimit then $$tree else fail ||])
+      (Dyn [|| $$(dynP es) + 1 ||], Dyn [|| if $$(dynP es) <= nodeLimit then $$(dynP tree) else fail ||])
     }
 
 randTrans' :: Int -> SearchTransformer () [Bool]
 randTrans' seed = SearchTransformer 
-  { tsInit = [|| () ||]
-  , esInit = [|| randoms $ mkStdGen seed ||]
-  , leftTs = IdState
+  { tsInit = Dyn [|| () ||]
+  , esInit = Dyn [|| randoms $ mkStdGen seed ||]
+  , leftTs = IdState2
   , rightTs = IdState 
-  , nextState = onlyEsT $ \_ es tree -> ([|| tail $$es ||], 
-    [|| let tree' = $$tree in if head $$es then flipT tree' else tree' ||])
+  , nextState = onlyEsT $ \_ es tree -> (Dyn [|| tail $$(dynP es) ||], 
+    Dyn [|| let tree' = $$(dynP tree) in if head $$(dynP es) then flipT tree' else tree' ||])
   }
 
-pairMaybe :: Rep a -> Rep b -> Maybe (Rep a) -> Maybe (Rep b) -> Maybe (Rep (a, b))
-pairMaybe defA defB a b = case (a,b) of 
-  (Nothing, Nothing) -> Nothing 
-  (a, b) -> Just $ pairP (maybe defA id a) (maybe defB id b)
+type Pair :: Type -> Type -> Type
+type family Pair a b where 
+  Pair a () = a
+  Pair () b = b  
+  Pair a b = (a,b)
 
-composeTrans' :: SearchTransformer ts1 es1 -> 
+data PairCase a b = PC (Rep a -> Rep b -> Rep (Pair a b)) (Rep (Pair a b) -> ContRep (Rep a, Rep b))
+
+class Pairable a b where 
+  pairCase :: PairCase a b 
+
+instance {-# OVERLAPPING #-} Pairable () () where 
+  pairCase = PC (const . const  Unit) (const $ pure (Unit, Unit))
+  
+instance {-# OVERLAPS #-} Pairable a () where 
+  pairCase = PC (curry fst) (\a -> pure (a, Unit))
+
+instance {-# OVERLAPS #-} Pairable () b where 
+  pairCase = PC (curry snd) (\b -> pure (Unit, b))
+
+instance {-# OVERLAPPABLE #-} (Pair a b ~ (a,b)) => Pairable a b where 
+  pairCase = PC pairP let_
+
+
+pairMaybe :: (Pairable a b) => Rep a -> Rep b -> Maybe (Rep a) -> Maybe (Rep b) -> Maybe (Rep (Pair a b))
+pairMaybe defA defB a b = let (PC inj _) = pairCase in 
+  case (a,b) of 
+  (Nothing, Nothing) -> Nothing 
+  (a, b) -> Just $ inj (maybe defA id a) (maybe defB id b)
+
+composeTrans' :: forall ts1 ts2 es1 es2. 
+  (Pairable ts1 ts2, Pairable es1 es2) => 
+  SearchTransformer ts1 es1 -> 
   SearchTransformer ts2 es2 -> 
-  SearchTransformer (ts1, ts2) (es1, es2)
-composeTrans' t1 t2 = SearchTransformer 
-  { tsInit = pairP (tsInit t1) (tsInit t2)
-  , esInit = pairP (esInit t1) (esInit t2) 
-  , leftTs = case (leftTs t1, leftTs t2) of 
-      (IdState, IdState) -> IdState 
-      (f1, f2) -> TransState $ \ts -> do 
-        (tsL, tsR) <- let_ ts 
-        tsL' <- getCont f1 $ tsL 
-        tsR' <- getCont f2 $ tsR 
-        pure $ pairP tsL' tsR'
+  SearchTransformer (Pair ts1 ts2) (Pair es1 es2)
+composeTrans' t1 t2 = 
+  let (PC injTs projTs) = pairCase @ts1 @ts2 
+      (PC injEs projEs) = pairCase @es1 @es2 in
+  SearchTransformer 
+  { tsInit = injTs (tsInit t1) (tsInit t2)
+  , esInit = injEs (esInit t1) (esInit t2)
+, leftTs = case (leftTs t1, leftTs t2) of 
+      (IdState2, IdState2) -> IdState2 
+      (f1, f2) -> TransState2 $ \ts -> do 
+        (tsL, tsR) <- projTs ts 
+        (tsL', tsL0) <- getCont2 f1 $ tsL 
+        (tsR', tsR0) <- getCont2 f2 $ tsR 
+        pure $ (injTs tsL' tsR', injTs tsL0 tsR0)
   , rightTs = case (rightTs t1, rightTs t2) of 
       (IdState, IdState) -> IdState 
       (f1, f2) -> TransState $ \ts -> do 
-        (tsL, tsR) <- let_ ts 
+        (tsL, tsR) <- projTs ts 
         tsL' <- getCont f1 $ tsL 
         tsR' <- getCont f2 $ tsR 
-        pure $ pairP tsL' tsR'
+        pure $ injTs tsL' tsR'
   , nextState = let 
         (NT f1) = nextState t1 
         (NT f2) = nextState t2 in NT $ \tsP esP tree -> do 
-          (tsL, tsR) <- let_ tsP 
-          (esL, esR) <- let_ esP 
+          (tsL, tsR) <- projTs tsP 
+          (esL, esR) <- projEs esP 
           (tsL', esL', tree') <- f1 tsL esL tree
           (tsR', esR', tree'') <- f2 tsR esR tree' 
           pure $ (pairMaybe tsL tsR tsL' tsR', pairMaybe esL esR esL' esR', tree'')
@@ -196,23 +237,23 @@ stage' (SearchTransformer tsInit esInit leftTs rightTs nextState) = rec2
     [||
     \ts es q tree -> case tree of 
       Pure a -> (a:) <$> $$continue es q
-      l :|: ri -> $$((r $ getCont leftTs [|| ts ||]) $ \tsL -> (r $ getCont rightTs [|| ts ||]) $ \tsR -> 
-        [|| $$continue es (pushQ ($$tsL, l) $ pushQ ($$tsR, ri) q)||])
+      l :|: ri -> $$(dynP $ (r $ getCont2 leftTs (Dyn [|| ts ||])) $ \(tsL, ts0) -> (r $ getCont rightTs ts0) $ \tsR -> 
+        Dyn [|| $$continue es (pushQ ($$(dynP tsL), l) $ pushQ ($$(dynP tsR), ri) q)||])
       Fail -> $$continue es q
     ||]
     )
   (\(go, _) -> [||
     \es q -> if nullQ q then pure [] else
       let ((ts, tree),q') = popQ q in
-        $$(
-          r (getNextTransform nextState [||ts||] [||es||] [||tree||]) $ 
-          \(ts', es', tree') -> [|| $$go $$ts' $$es' q' $$tree' ||]
+        $$(dynP $ 
+          r ( getNextTransform nextState (Dyn [||ts||]) (Dyn [||es||]) (Dyn [||tree||]) ) $ 
+          \(ts', es', tree') -> Dyn [|| $$go $$(dynP ts') $$(dynP es') q' $$(dynP tree') ||]
           )
   ||])
-  (\(go, _) -> [|| $$go $$tsInit $$esInit ||])
+  (\(go, _) -> [|| $$go $$(dynP tsInit) $$(dynP esInit) ||])
 
-exampleTrans :: SearchTransformer ((Int, ()), ()) (((), [Bool]), Int)
+exampleTrans :: SearchTransformer Int ([Bool], Int)
 exampleTrans = composeTrans' (composeTrans' (dbsTrans' 15) (randTrans' 300)) (nbsTrans' 1500)
 
-stagedExample :: Code Q ([(((Int, ()), ()), Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
+stagedExample :: Code Q ([(Int, Free (NonDet :+: Void) a)] -> Free (NonDet :+: Void) a -> Free Void [a])
 stagedExample = stage' exampleTrans

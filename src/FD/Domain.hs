@@ -39,6 +39,7 @@ module FD.Domain (
     isSingleton,
     filterLessThan,
     filterGreaterThan,
+    filterPredicate,
     findMax,
     findMin,
     size,
@@ -159,6 +160,10 @@ filterLessThan n (x@(Range xl xh)) = debug ("[Domain.filterLess] " ++ printDom x
 filterGreaterThan :: Int -> Domain -> Domain
 filterGreaterThan n (x@(Set xs)) = debug ("[Domain.filterGreater] " ++ printDom x) $ Set $ IntSet.filter (> n) xs
 filterGreaterThan n (x@(Range xl xh)) = debug ("[Domain.filterGreater] " ++ printDom x) $ Range (max (n+1) xl) xh
+
+filterPredicate :: (Int -> Bool) -> Domain -> Domain 
+filterPredicate pred (x@(Set xs)) = Set $ IntSet.filter pred xs 
+filterPredicate pred (x@(Range xl xh)) = Set $ IntSet.fromList $ filter pred [xl..xh]
 
 findMax :: Domain -> Int
 findMax (x@(Set xs)) = debug ("[Domain.findMax] " ++ printDom x) $ IntSet.findMax xs

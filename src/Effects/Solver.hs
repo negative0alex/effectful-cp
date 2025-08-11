@@ -16,7 +16,6 @@
 module Effects.Solver where
 import Control.Monad.Free (Free (..))
 import Effects.Core (Sub(..), project, inject)
-import FD.OvertonFD (OvertonFD, OPlus ((:+)), OConstraint (..))
 import Solver(Solver(..))
 
 data SolverE solver a where 
@@ -36,9 +35,7 @@ solve a = solve' $ pure <$> a
 
 runSolver :: Solver solver => Free (SolverE solver) a -> solver a 
 runSolver (Pure a) = pure a
-runSolver (Solver a) = do 
-  a' <- a 
-  runSolver a'
+runSolver (Solver a) = a >>= runSolver
 
 solveConstraints :: Solver solver => Free (SolverE solver) a -> a 
 solveConstraints = run . runSolver

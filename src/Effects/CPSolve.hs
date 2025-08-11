@@ -29,7 +29,8 @@ module Effects.CPSolve (
 , (@\==)
 , addSum
 , (@<)
-, (@>)) where
+, (@>)
+, prime) where
 import Control.Monad.Free (Free (..))
 import Effects.Core (Sub(..), project, inject)
 import FD.OvertonFD (OvertonFD, OPlus ((:+)), OConstraint (..))
@@ -109,3 +110,6 @@ v1 @\== (v2 :+ n) = do
 
 addSum :: (CPSolve OvertonFD `Sub` sig) => Term OvertonFD -> Term OvertonFD -> Term OvertonFD -> Free sig ()
 addSum a b c = add @OvertonFD (OAdd a b c)
+
+prime :: (CPSolve OvertonFD `Sub` sig) => Term OvertonFD -> Free sig ()
+prime a = add @OvertonFD (OPrime a)

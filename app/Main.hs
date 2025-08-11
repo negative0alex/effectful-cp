@@ -6,9 +6,12 @@
 module Main where
 import qualified Handlers
 import qualified Queens
+import qualified Queens2 
+import qualified BranchAndBound
 import System.Environment (getArgs)
 import Staging.Staging as Staging
 import qualified Experiments.CombinedHandlers
+import qualified BranchAndBound
 
 
 main :: IO ()
@@ -20,8 +23,10 @@ main = do
       disc = 5000000
       seed = 2801
       sols = case arg of 
+        "main" -> Handlers.testVeryBigExample
         "naive" -> Handlers.testNaive $ Queens.nqueens queens
         "handlers_it" -> Handlers.testIt $ Queens.nqueens queens
+        "handlers_it2" -> BranchAndBound.testDumb $ Queens2.nqueens queens
         "handlers_dbs" -> Handlers.testDbs depth $ Queens.nqueens queens
         "handlers_nbs_dbs" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
         "handlers_lds_nbs_dbs" -> Handlers.testLdsNbsDbs disc nodes depth $ Queens.nqueens queens
@@ -44,6 +49,9 @@ main = do
         "example_1" -> Handlers.testExampleIt (Queens.nqueens 10)
         "example_2" -> Experiments.CombinedHandlers.testExampleTraverse (Queens.nqueens 10)
         "example_3" -> Experiments.CombinedHandlers.testExampleEval (Queens.nqueens 10)
+        "vbe_h" -> Handlers.testVeryBigExample
+        "vbe_s" -> Staging.veryBigStaged
+        "vbe_o" -> Staging.veryBigOptimised
         _ -> []
   print $ length sols
   

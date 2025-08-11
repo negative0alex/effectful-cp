@@ -20,6 +20,7 @@ import Queues (Queue (..))
 import Solver (Solver (..))
 import System.Random
 import Prelude hiding (fail)
+import Queens (nqueens)
 
 eval ::
   (Solver solver, NonDet `Sub` sig, Traversable sig) =>
@@ -222,6 +223,9 @@ testExample model = run $ runEffects . it . (nbsC 1500) . (randC 300) . (dbsC 15
 
 testBigExample :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testBigExample model = run $ runEffects . it . (nbsC 18000) . (randC 300) . (dbsC 25) . (traverseQ []) <$> eval model
+
+testVeryBigExample :: [[Int]]
+testVeryBigExample = run $ runEffects . it . (nbsC 320000) . (randC 300) . (dbsC 32) . (traverseQ []) <$> eval (nqueens 12)
 
 testBigFusedExample :: (Solver solver) => Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
 testBigFusedExample model = run $ runEffects . it . (exampleTrans 18000 300 25) . (traverseQ []) <$> eval model
