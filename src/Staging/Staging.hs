@@ -20,6 +20,10 @@ import Staging.Optimisation
 import Language.Haskell.TH
 import qualified Staging.Handlers as Staging
 import Queens (nqueens)
+import Staging.Effectful (bnbStaged)
+import FD.OvertonFD
+import Effects.Solver
+import BranchAndBound (gmodel)
 
 testStaged :: Solver solver => 
   (Free (NonDet :+: Void) a -> Free Void [a]) -> Free (CPSolve solver :+: (NonDet :+: Void)) a -> [a]
@@ -118,3 +122,12 @@ powern pow x
 
 power :: Integer -> CodeQ (Integer -> Integer)
 power = \pow -> codeCurry $ powern pow
+
+--
+
+bb :: Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a -> Free (SolverE OvertonFD) [a]
+bb = $$bnbStaged []
+
+testBb :: Int -> [Int]
+testBb n = run . runSolver $ bb (gmodel n)
+

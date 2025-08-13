@@ -27,7 +27,10 @@ import Solver (Solver (..))
 import Staging.Handlers (rec2)
 import Prelude hiding (fail)
 
--- import BranchAndBound
+
+showCode :: Code Q a -> IO ()
+showCode code = do expr <- runQ (unTypeCode (code))
+                   putStrLn (pprint expr)
 
 codeCurry :: (Rep a -> Rep b) -> Rep (a -> b)
 codeCurry f = [||\a -> $$(f [||a||])||]
@@ -46,10 +49,11 @@ newtype NextTransform ts es solver a
       ( Rep ts ->
         Rep es ->
         Rep (SearchTree solver a) ->
-        Rep (ts, es, SearchTree solver a)
+        (Rep ts, Rep es, Rep (SearchTree solver a))
       )
 
-unNT :: NextTransform ts es solver a -> Rep ts -> Rep es -> Rep (SearchTree solver a) -> Rep (ts, es, SearchTree solver a)
+unNT :: NextTransform ts es solver a -> Rep ts -> Rep es -> Rep (SearchTree solver a) -> 
+  (Rep ts, Rep es, Rep (SearchTree solver a))
 unNT (NT f) = f
 
 idState :: (Solver solver) => StateTransform state solver
@@ -72,7 +76,7 @@ dbsTrans depthLimit =
       solEs = idState,
       leftTs = ST $ \ts -> [||pure $ $$ts + 1||],
       rightTs = ST $ \ts -> [||pure $ $$ts + 1||],
-      nextState = NT $ \ts es model -> [||($$ts, $$es, if $$ts <= depthLimit then $$model else fail)||]
+      nextState = NT $ \ts es model -> (ts, es, [||if $$ts <= depthLimit then $$model else fail||])
     }
 
 -- branch and bound scaffolding
@@ -97,16 +101,23 @@ bbTrans newBound =
       leftTs = idState,
       rightTs = idState,
       nextState = NT @Int @(BBEvalState solver a) @solver $ \ts es tree ->
-        [||
-        let (BBP nv bound) = $$es
-            v = $$ts
-         in if nv > v
-              then do
-                let tree' = bound (undefined)
-                 in (nv, $$es, tree')
-              else
-                (v, $$es, $$tree)
-        ||]
+        -- [||
+        -- let (BBP nv bound) = $$es
+        --     v = $$ts
+        --  in if nv > v
+        --       then do
+        --         let tree' = bound ($$tree)
+        --          in (nv, $$es, tree')
+        --       else
+        --         (v, $$es, $$tree)
+        -- ||]
+        ( [|| let (BBP nv _) = $$es
+                  v = $$ts in if nv > v then nv else v ||]
+        , es
+        , [|| let (BBP nv bound) = $$es
+                  v = $$ts in if nv > v 
+                    then bound($$tree) 
+                    else $$tree ||])
     }
 
 newBound :: forall a. NewBound OvertonFD a
@@ -123,15 +134,13 @@ bb :: SearchTransformer Int (BBEvalState OvertonFD a) OvertonFD a
 bb = bbTrans newBound
 
 stage ::
-  forall solver q ts es a.
-  ( Solver solver,
-    Queue q,
-    Elem q ~ (Label solver, ts, SearchTree solver a)
+  forall q ts es a.
+  ( Queue q,
+    Elem q ~ (Label OvertonFD, ts, SearchTree OvertonFD a)
   ) =>
-  SearchTransformer ts es solver a ->
-  Code
-    Q
-    (q -> SearchTree solver a -> Free (SolverE solver) [a])
+  SearchTransformer ts es OvertonFD a ->
+  Code Q
+    (q -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
 stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
   rec2
     ( \(go, continue) ->
@@ -147,16 +156,15 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
             $$continue es (pushQ (now, tsL, l) $ pushQ (now, tsR, r) q)
           Fail -> $$continue es q
           (Add c k) -> do
-            success <- solve @solver $ addCons c
+            success <- solve @OvertonFD $ addCons c
             if success then $$go ts es q k else $$continue es q
           (NewVar k) -> do
-            var <- solve @solver newvar
+            var <- solve @OvertonFD newvar
             $$go ts es q (k var)
           (Dynamic k) -> do
-            term <- solve @solver k
+            term <- solve @OvertonFD k
             $$go ts es q term
-          -- (Other op) -> Free . Inr $ (\t -> $$go ts es q t) <$> op
-          (Solver k) -> solve' @solver $ ($$go ts es q) <$> k
+          (Other2 op) -> Free $ (\t -> $$go ts es q t) <$> op
         ||]
     )
     ( \(go, _) ->
@@ -164,13 +172,50 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
         \es q ->
           if nullQ q
             then pure []
-            else do
-              let ((label, ts, tree), q') = popQ q
-              let (ts', es', tree') = $$(unNT nextState [|| ts ||] [|| es ||] [|| tree ||])
-              solve $ goto label
-              $$go ts' es' q' tree'
-
-                
+            else
+              let ((label, ts, tree), q') = popQ q in 
+              $$(
+              let (ts', es', tree') = unNT nextState [||ts||] [||es||] [||tree||] in
+              [||$$go $$ts' $$es' q' ( (solve $ goto label) >> $$tree')||])
         ||]
     )
     (\(go, _) -> [||$$go $$tsInit $$esInit||])
+
+bnbStaged :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
+bnbStaged = stage bb
+
+composeTrans :: (Solver solver) => SearchTransformer ts1 es1 solver a -> 
+                SearchTransformer ts2 es2 solver a -> 
+                SearchTransformer (ts1, ts2) (es1, es2) solver a
+composeTrans t1 t2 = 
+  SearchTransformer {
+    tsInit = [|| ($$(tsInit t1), $$(tsInit t2)) ||] 
+  , esInit = [|| ($$(esInit t1), $$(esInit t2)) ||] 
+  , leftTs = ST $ \ts -> 
+                    let ts1 = [|| fst $$ts ||]
+                        ts2 = [|| snd $$ts ||]
+                      in [|| $$(unST (leftTs t1) $ ts1) >>= 
+                        \ts1' -> $$(unST (leftTs t2) $ ts2) >>= 
+                        \ts2' -> pure (ts1', ts2') ||]
+  , rightTs = ST $ \ts -> 
+                    let ts1 = [|| fst $$ts ||]
+                        ts2 = [|| snd $$ts ||]
+                      in [|| $$(unST (rightTs t1) $ ts1) >>= 
+                        \ts1' -> $$(unST (rightTs t2) $ ts2) >>= 
+                        \ts2' -> pure (ts1', ts2') ||] 
+  , solEs = ST $ \es -> 
+                    let es1 = [|| fst $$es ||]
+                        es2 = [|| snd $$es ||]
+                      in [|| $$(unST (solEs t1) $ es1) >>= 
+                        \es1' -> $$(unST (solEs t2) $ es2) >>= 
+                        \es2' -> pure (es1', es2') ||]
+  , nextState = NT $ \ts es tree -> 
+                              let ts1 = [|| fst $$ts ||]
+                                  ts2 = [|| snd $$ts ||]
+                                  es1 = [|| fst $$es ||]
+                                  es2 = [|| snd $$es ||]
+                                  (ts1', es1', tree') = unNT (nextState t1) ts1 es1 tree
+                                  (ts2', es2', tree'') = unNT (nextState t2) ts2 es2 tree'
+                                in 
+                                  ([|| ($$ts1', $$ts2') ||], [|| ($$es1', $$es2') ||], tree'')
+  }

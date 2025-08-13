@@ -138,7 +138,7 @@ newBound = do
 
 ----------------------------------------------------------
 
-type CSP' a = Free (CPSolve OvertonFD :+: NonDet :+: (SolverE OvertonFD)) a
+type CSP' a = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a
 
 gmodel :: Int -> CSP' Int
 gmodel n = exists @OvertonFD $ \_ -> path 1 n 0
