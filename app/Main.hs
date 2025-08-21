@@ -26,7 +26,6 @@ main = do
         "main" -> Handlers.testVeryBigExample
         "naive" -> Handlers.testNaive $ Queens.nqueens queens
         "handlers_it" -> Handlers.testIt $ Queens.nqueens queens
-        "handlers_it2" -> BranchAndBound.testDumb $ Queens2.nqueens queens
         "handlers_dbs" -> Handlers.testDbs depth $ Queens.nqueens queens
         "handlers_nbs_dbs" -> Handlers.testNbsDbs nodes depth $ Queens.nqueens queens
         "handlers_lds_nbs_dbs" -> Handlers.testLdsNbsDbs disc nodes depth $ Queens.nqueens queens
@@ -52,6 +51,8 @@ main = do
         "vbe_h" -> Handlers.testVeryBigExample
         "vbe_s" -> Staging.veryBigStaged
         "vbe_o" -> Staging.veryBigOptimised
+        "bb_h" -> [BranchAndBound.bbBench 70]
+        "bb_s" -> [Staging.testBbBench 70]
         _ -> []
-  print $ length sols
+  print $ sols
   

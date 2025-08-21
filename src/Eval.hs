@@ -18,7 +18,7 @@ import Solver (Solver (..))
 import Prelude hiding (fail)
 
 type SearchTree solver a = Free (CPSolve solver :+: NonDet :+: SolverE solver) a
-type TransformerTree ts es solver a = Free (TransformerE ts es (SearchTree solver a) :+: SolverE solver) [a]
+type TransformerTree ts es solver a b = Free (TransformerE ts es (SearchTree solver a) :+: SolverE solver) b
 type CSP' a = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a
 
 evalQ ::
@@ -26,11 +26,11 @@ evalQ ::
   (Solver solver, Queue q, Elem q ~ (Label solver, ts, SearchTree solver a)) =>
   q ->
   SearchTree solver a ->
-  TransformerTree ts es solver a
+  TransformerTree ts es solver a [a]
 evalQ queue model = initT (\ts es -> go model queue ts es)
  where
-  go :: SearchTree solver a -> q -> ts -> es -> TransformerTree ts es solver a
-  continue :: q -> es -> TransformerTree ts es solver a
+  go :: SearchTree solver a -> q -> ts -> es -> TransformerTree ts es solver a [a]
+  continue :: q -> es -> TransformerTree ts es solver a [a]
   -- go = handle (algCP <| algNonDet <| conCSP) genCSP
 
   -- genCSP a q _ es = solT es (\es' -> (a :) <$> continue q es')

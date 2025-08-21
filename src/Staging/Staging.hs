@@ -131,8 +131,9 @@ bb = $$bnbStaged []
 testBb :: Int -> [Int]
 testBb n = run . runSolver $ bb (gmodel n)
 
+-- seed discrepancy
 bbBenchStaged :: Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a -> Free (SolverE OvertonFD) [a]
-bbBenchStaged = $$(bbBench 2501 50) []
+bbBenchStaged = $$(bbBench 2501 500) []
 
 testBbBench :: Int -> [Int]
 testBbBench n = run . runSolver $ bbBenchStaged (gmodel n)

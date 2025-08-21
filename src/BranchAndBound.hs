@@ -13,16 +13,15 @@ module BranchAndBound where
 
 import Control.Monad.Free (Free (..))
 import Effects.CPSolve (CPSolve, dynamic, exists, (@<), (@>))
-import Effects.Core ((:+:) (..), pattern Other)
+import Effects.Core ((:+:) (..))
 import Effects.NonDet (NonDet (..))
 import Effects.Solver (SolverE, runSolver, solve)
-import Effects.Transformer (pattern InitT, pattern LeftT, pattern NextT, pattern RightT, pattern SolT)
+import Eval
 import FD.OvertonFD (OvertonFD, fd_domain, fd_objective)
 import Queens
 import Solver (Solver (..))
+import Transformers (Transformer, it, lds, makeTEff, rand)
 import Prelude hiding (fail)
-import Eval
-import Transformers (rand, lds)
 
 type Bound solver a =
   Free (CPSolve solver :+: NonDet :+: SolverE solver) a ->
@@ -32,33 +31,17 @@ type NewBound solver a = solver (Bound solver a)
 
 data BBEvalState solver a = BBP Int (Bound solver a)
 
-bb ::
-  forall a solver.
-  (Solver solver) =>
-  NewBound solver a ->
-  TransformerTree Int (BBEvalState solver a) solver a ->
-  Free (SolverE solver) [a]
-bb newBound = go
- where
-  go ::
-    TransformerTree Int (BBEvalState solver a) solver a -> Free (SolverE solver) [a]
-  go (Pure a) = pure a
-  go (InitT k) = go $ k 0 (BBP 0 id)
-  go (SolT (BBP v _) k) = do
-    bound' <- solve @solver $ newBound
-    go $ k (BBP (v + 1) bound')
-  go (LeftT ts k) = go $ k ts
-  go (RightT ts k) = go $ k ts
-  go (NextT tree v es@(BBP nv bound) k) =
-    if nv > v
-      then do
-        let tree' = bound tree
-         in go $ k tree' nv es
-      else go $ k tree v es
-  go (Other op) = Free $ go <$> op
+bb :: (Solver solver) => NewBound solver a -> Transformer Int (BBEvalState solver a) solver a
+bb newBound = makeTEff
+  0
+  (BBP 0 id)
+  (\(BBP v _) -> solve newBound >>= \bound' -> pure (BBP (v + 1) bound'))
+  pure
+  pure
+  $ \v es@(BBP nv bound) tree -> if nv > v then (nv, es, bound tree) else (v, es, tree)
 
 bbSolve :: CSP' a -> [a]
-bbSolve model = run . runSolver . (bb newBound) . (evalQ []) $ model
+bbSolve model = run . runSolver . it . (bb newBound) . (evalQ []) $ model
 
 newBound :: forall a. NewBound OvertonFD a
 newBound = do
@@ -67,8 +50,8 @@ newBound = do
   let val = head dom
   return ((\tree -> obj @< val /\ tree) :: Bound OvertonFD a)
 
-bbBench :: Int -> Int -> Int -> [Int]
-bbBench seed disc n = run . runSolver . (bb newBound) . (lds disc) . (rand seed) . (evalQ []) $ (gmodel n)
+bbBench :: Int -> [Int]
+bbBench n = run . runSolver . it . (bb newBound) . (lds 500) . (rand 2501) . (evalQ []) $ (gmodel n)
 
 ----------------------------------------------------------
 
