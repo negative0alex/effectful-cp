@@ -11,11 +11,11 @@ module Eval where
 
 import Control.Monad.Free (Free (..))
 import Effects.Algebra
-import Effects.CPSolve (CPSolve (..), pattern Add, pattern Dynamic, pattern NewVar)
-import Effects.Core ((:+:) (..), pattern Other2)
-import Effects.NonDet (NonDet (..), pattern Fail, pattern (:|:))
+import Effects.CPSolve (CPSolve (..))
+import Effects.Core ((:+:) (..))
+import Effects.NonDet (NonDet (..), pattern (:|:))
 import Effects.Solver (SolverE, solve)
-import Effects.Transformer (TransformerE (..), initT, leftS, leftT, nextT, rightS, rightT, solT)
+import Effects.Transformer (TransformerE (..), initT, leftS, nextT, rightS, solT)
 import FD.OvertonFD (OvertonFD)
 import Queues (Queue (..))
 import Solver (Solver (..))
@@ -23,7 +23,7 @@ import Prelude hiding (fail)
 
 type SearchTree solver a = Free (CPSolve solver :+: NonDet :+: SolverE solver) a
 type TransformerTree ts es solver a b = Free (TransformerE ts es (SearchTree solver a) :+: SolverE solver) b
-type CSP' a = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a
+type CSP a = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a
 
 eval ::
   forall solver q a es ts.

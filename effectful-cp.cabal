@@ -58,33 +58,25 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Handlers
-                    , Transformers
+    exposed-modules:  Transformers
+                    , Old.Handlers
+                    , Old.Queens
                     , Eval
                     , Solver
                     , Queens
-                    , Queens2
                     , BranchAndBound
                     , Effects.NonDet 
                     , Effects.CPSolve
                     , Effects.Transformer
-                    , Effects.Comb
                     , Effects.Core
                     , Effects.State
                     , Effects.Solver
                     , Effects.Algebra
                     , Effects.Writer
-                    , Staging.Handlers
-                    , Staging.Staging
-                    , Staging.Optimisation
-                    , Staging.IncrementalOptimisation1
-                    , Staging.IncrementalOptimisation2
-                    , Staging.IncrementalOptimisation3
-                    , Staging.IncrementalOptimisation4
-                    , Staging.IncrementalOptimisation5
-                    , Staging.IncrementalOptimisation6
-                    , Staging.Effectful
-                    , Experiments.CombinedHandlers
+                    , Staging.Toplevel
+                    , Staging.Old.Direct
+                    , Staging.Old.Optimised
+                    , Staging.Direct
 
     -- Modules included in this library but not exported.
     other-modules:  FD.OvertonFD 

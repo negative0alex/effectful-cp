@@ -14,11 +14,10 @@ import FD.OvertonFD as OvertonFD
 import FD.Domain as Domain
 import GHC.Exts (sortWith)
 import Effects.Core ((:+:), Void, Sub)
-import Effects.CPSolve (CPSolve, exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic, exists, (@>), (@<), prime)
+import Effects.CPSolve (exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic)
 import Control.Monad.Free (Free)
 import Effects.NonDet (try, fail, NonDet)
-
-type CSP = Free (CPSolve OvertonFD :+: NonDet :+: Void)
+import Eval (CSP)
 
 nqueens :: Int -> CSP [Int]
 nqueens n = exist n $ \queens -> model queens n /\ enumerate queens /\ assignments queens
@@ -111,7 +110,3 @@ knapsack w vs
     pure (v:vs')
   where
     select = foldr (try . pure) fail
-
----
-primes :: CSP [Int]
-primes = exists $ \var -> ((var @> 4 /\ var @< 8 /\ prime var) \/ var @= 10) /\ enumerate [var] /\ assignments [var]

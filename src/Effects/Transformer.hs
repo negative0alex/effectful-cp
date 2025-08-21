@@ -35,14 +35,16 @@ pattern LeftT ts k <- (project -> Just (LeftT' ts k))
 leftT :: forall ts es el a sig. (TransformerE ts es el `Sub` sig) => ts -> (ts -> Free sig a) -> Free sig a
 leftT ts k = inject (LeftT' @ts @(Free sig a) @es @el ts k)
 
-leftS ts = leftT ts pure
+leftS :: forall ts es el sig. (TransformerE ts es el `Sub` sig) => ts -> Free sig ts
+leftS ts = inject (LeftT' @ts @(Free sig ts) @es @el ts pure)
 
 pattern RightT ts k <- (project -> Just (RightT' ts k))
 
 rightT :: forall ts es el a sig. (TransformerE ts es el `Sub` sig) => ts -> (ts -> Free sig a) -> Free sig a
 rightT ts k = inject (RightT' @ts @(Free sig a) @es @el ts k)
 
-rightS ts = rightT ts pure
+rightS :: forall ts es el sig. (TransformerE ts es el `Sub` sig) => ts -> Free sig ts
+rightS ts = inject (RightT' @ts @(Free sig ts) @es @el ts pure)
 
 pattern NextT el ts es k <- (project -> Just (NextT' el ts es k))
 

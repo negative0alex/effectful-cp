@@ -25,10 +25,12 @@ instance Traversable NonDet where
   traverse f (Try' l r) = (Try' <$> f l) <*> f r
   traverse _ Fail' = pure Fail'
 
+pattern Fail :: Sub NonDet sup => Free sup a
 pattern Fail <- (project -> Just Fail')
 fail :: (NonDet `Sub` sig) => Free sig a 
 fail = inject Fail'
 
+pattern (:|:) :: Sub NonDet sup => Free sup a -> Free sup a -> Free sup a
 pattern p :|: q <- (project -> Just (Try' p q))
 try :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a 
 try p q = inject (Try' p q)

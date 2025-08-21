@@ -12,12 +12,11 @@ module Transformers where
 
 import Control.Monad.Free (Free, MonadFree (wrap))
 import Effects.Algebra
-import Effects.Core ((:+:) (..))
-import Effects.NonDet (fail)
+import Effects.Core ((:+:) (..), Sub)
+import Effects.NonDet (fail, NonDet, pattern (:|:), try)
 import Effects.Solver (SolverE)
 import Effects.Transformer (TransformerE (..), initT, leftT, nextT, rightT, solT)
 import Eval
-import Handlers (flipT)
 import Solver (Solver (..))
 import System.Random
 import Prelude hiding (fail)
@@ -87,6 +86,10 @@ dbs depthLimit = makeT 0 () id succ succ $ \depth u tree -> (depth, u, if depth 
 
 nbs :: (Solver solver) => Int -> Transformer () Int solver a
 nbs nodeLimit = makeT () 0 id id id $ \u nodes tree -> (u, nodes + 1, if nodes <= nodeLimit then tree else fail)
+
+flipT :: (NonDet `Sub` sig) => Free sig a -> Free sig a
+flipT (l :|: r) = try r l
+flipT other = other
 
 rand :: (Solver solver) => Int -> Transformer () [Bool] solver a
 rand seed = makeT

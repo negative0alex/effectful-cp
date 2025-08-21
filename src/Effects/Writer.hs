@@ -10,7 +10,7 @@
 {-# LANGUAGE InstanceSigs #-}
 module Effects.Writer where
 import Control.Monad.Free (Free(..))
-import Effects.Core (Sub, project, inject)
+import Effects.Core (Sub, inject)
 
 data Writer w k where 
   Tell :: w -> k -> Writer w k 

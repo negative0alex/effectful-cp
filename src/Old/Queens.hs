@@ -1,4 +1,3 @@
-
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# LANGUAGE TransformListComp #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
@@ -7,37 +6,36 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Queens2 where 
+module Old.Queens where 
 import Prelude hiding (fail)
 import Data.List (tails)
 import FD.OvertonFD as OvertonFD
 import FD.Domain as Domain
 import GHC.Exts (sortWith)
 import Effects.Core ((:+:), Void, Sub)
-import Effects.CPSolve (CPSolve, exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic)
+import Effects.CPSolve (CPSolve, exist, in_domain, (@\=), (@\==), (@+), (@=), dynamic, exists, (@>), (@<), prime)
 import Control.Monad.Free (Free)
 import Effects.NonDet (try, fail, NonDet)
-import Effects.Solver
 
-type CSP = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD)
+type CSP' = Free (CPSolve OvertonFD :+: NonDet :+: Void)
 
-nqueens :: Int -> CSP [Int]
+nqueens :: Int -> CSP' [Int]
 nqueens n = exist n $ \queens -> model queens n /\ enumerate queens /\ assignments queens
 
-model :: [FDVar] -> Int -> CSP ()
+model :: [FDVar] -> Int -> CSP' ()
 model queens n = queens `allin` (1,n) /\ alldifferent queens /\ diagonals queens
 
-allin :: [FDVar] -> (Int, Int) -> CSP ()
+allin :: [FDVar] -> (Int, Int) -> CSP' ()
 allin queens range = conj [q `in_domain` range | q <- queens]
 
-alldifferent :: [FDVar] -> CSP ()
+alldifferent :: [FDVar] -> CSP' ()
 alldifferent queens = conj [qi @\= qj | qi : qjs <- tails queens, qj <- qjs]
 
-diagonals :: [FDVar] -> CSP ()
+diagonals :: [FDVar] -> CSP' ()
 diagonals queens = conj [ (qi @\== (qj @+ d)) /\ (qj @\== (qi @+ d)) | qi : qjs <- tails queens, (qj, d) <- zip qjs [1..]]
 -- enumerate queens values = conj [ enum queen values | queen <- queens]
 
-enum :: FDVar -> [Int] -> CSP ()
+enum :: FDVar -> [Int] -> CSP' ()
 enum var values = disj [ var @= value | value <- values ]
 
 (\/) :: (NonDet `Sub` sig) => Free sig a -> Free sig a -> Free sig a
@@ -66,7 +64,7 @@ conj = foldl (/\) true
 enumerate vs = dynamic (label firstfail id vs)
 
 label :: ([FDVar] -> OvertonFD [FDVar]) -> ([Int] -> [Int]) ->
-  [FDVar] -> OvertonFD (CSP ())
+  [FDVar] -> OvertonFD (CSP' ())
 label varsel valsel vs = do
   vs' <- varsel vs
   label' vs'
@@ -93,7 +91,7 @@ interleave (x:xs) ys = x:interleave ys xs
 
 -- ----------------------| Assignment |----------------------
 
-assignments :: [FDVar] -> CSP [Int]
+assignments :: [FDVar] -> CSP' [Int]
 assignments = mapM assignment 
 assignment q = dynamic $ do 
   d <- fd_domain q
@@ -112,3 +110,7 @@ knapsack w vs
     pure (v:vs')
   where
     select = foldr (try . pure) fail
+
+---
+primes :: CSP' [Int]
+primes = exists $ \var -> ((var @> 4 /\ var @< 8 /\ prime var) \/ var @= 10) /\ enumerate [var] /\ assignments [var]

@@ -15,10 +15,12 @@ data State s a where
   Put' :: s -> a -> State s a 
   deriving Functor
 
+pattern Get :: Sub (State s) sup => (s -> Free sup a) -> Free sup a
 pattern Get k <- (project -> Just (Get' k))
 get :: (State s `Sub` sig) => Free sig s 
 get = inject (Get' pure)
 
+pattern Put :: Sub (State s) sup => s -> Free sup a -> Free sup a
 pattern Put s k<- (project -> Just (Put' s k))
 put :: (State s `Sub` sig) => s -> Free sig ()
 put s = inject (Put' s (pure ()))

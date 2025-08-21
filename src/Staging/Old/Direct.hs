@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
-module Staging.Handlers where
+module Staging.Old.Direct where
 
 import Control.Monad.Free
 import Effects.Core
@@ -20,7 +20,7 @@ import Effects.NonDet
 import Queues
 import Prelude hiding (fail)
 import System.Random
-import Handlers (flipT)
+import Transformers (flipT)
 
 codeCurry :: (CodeQ a -> CodeQ b) -> CodeQ (a -> b)
 codeCurry f = [||\a -> $$(f [||a||])||]

@@ -40,7 +40,7 @@ bb newBound = makeTEff
   pure
   $ \v es@(BBP nv bound) tree -> if nv > v then (nv, es, bound tree) else (v, es, tree)
 
-bbSolve :: CSP' a -> [a]
+bbSolve :: CSP a -> [a]
 bbSolve model = run . runSolver . it . (bb newBound) . (eval []) $ model
 
 newBound :: forall a. NewBound OvertonFD a
@@ -55,10 +55,10 @@ bbBench n = run . runSolver . it . (bb newBound) . (lds 500) . (rand 2501) . (ev
 
 ----------------------------------------------------------
 
-gmodel :: Int -> CSP' Int
+gmodel :: Int -> CSP Int
 gmodel n = exists $ \_ -> path 1 n 0
 
-path :: Int -> Int -> Int -> CSP' Int
+path :: Int -> Int -> Int -> CSP Int
 path x y d
   | x == y = pure d
   | otherwise =

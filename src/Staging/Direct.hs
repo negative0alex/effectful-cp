@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Staging.Effectful where
+module Staging.Direct where
 
 import Control.Monad.Free
 import Effects.CPSolve
@@ -19,12 +19,12 @@ import Effects.Core
 import Effects.NonDet
 import Effects.Solver
 import FD.OvertonFD
-import Handlers (flipT)
+import Transformers (flipT)
 import Language.Haskell.TH
 import Queens ((/\))
 import Queues
 import Solver (Solver (..))
-import Staging.Handlers (rec2)
+import Staging.Old.Direct (rec2)
 import System.Random
 import Prelude hiding (fail)
 import Eval (SearchTree)
