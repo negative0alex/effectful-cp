@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE PolyKinds #-}
 module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, getRUnsafe, unitr, wrapF, wrapFree, liftR, pattern Other2)
 where
 import Control.Monad.Free (Free(..), MonadFree (wrap))
@@ -52,7 +53,7 @@ instance  {-# OVERLAPS #-}
 
 
 instance {-# INCOHERENT #-}
-  (Functor (f a), Functor sig2, a ~ b) => f b `Sub` (f a :+: sig2) where 
+  (Functor (f a), Functor sig2, a ~ b) => f b `Sub` (f (a::k) :+: sig2) where 
     inj = Inl 
     prj (Inl fa) = Just fa
     prj _ = Nothing

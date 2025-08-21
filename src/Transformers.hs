@@ -1,0 +1,72 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
+
+-- {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+
+module Transformers where
+
+import Control.Monad.Free (MonadFree (wrap))
+import Effects.Algebra
+import Effects.Core ((:+:) (..))
+import Effects.NonDet (fail)
+import Effects.Transformer (TransformerE (..), initT, leftT, nextT, rightT, solT)
+import Eval
+import Handlers (flipT)
+import Solver (Solver (..))
+import System.Random
+import Prelude hiding (fail)
+
+type Transformer ts es solver a =
+  forall ts' es'.
+  TransformerTree (ts, ts') (es, es') solver a ->
+  TransformerTree ts' es' solver a
+
+makeT ::
+  forall ts es solver a.
+  (Solver solver) =>
+  ts ->
+  es ->
+  (es -> es) ->
+  (ts -> ts) ->
+  (ts -> ts) ->
+  (ts -> es -> SearchTree solver a -> (ts, es, SearchTree solver a)) ->
+  Transformer ts es solver a
+makeT tsInit esInit solEs leftTs rightTs nextState = handle (alg <| wrap . Inr) pure
+ where
+  alg ::
+    TransformerE
+      (ts, ts')
+      (es, es')
+      (SearchTree solver a)
+      (TransformerTree ts' es' solver a) ->
+    TransformerTree ts' es' solver a
+  alg (InitT' k) = initT $ \tsRest esRest -> k (tsInit, tsRest) (esInit, esRest)
+  alg (LeftT' (ts, tsRest) k) = leftT tsRest $ \tsRest' -> k (leftTs ts, tsRest')
+  alg (RightT' (ts, tsRest) k) = rightT tsRest $ \tsRest' -> k (rightTs ts, tsRest')
+  alg (SolT' (es, esRest) k) = solT esRest $ \esRest' -> k (solEs es, esRest')
+  alg (NextT' tree (ts, tsRest) (es, esRest) k) =
+    let (ts', es', tree') = nextState ts es tree
+     in nextT tree' tsRest esRest $ \tree'' tsRest' esRest' -> k tree'' (ts', tsRest') (es', esRest')
+
+dbs :: (Solver solver) => Int -> Transformer Int () solver a
+dbs depthLimit = makeT 0 () id succ succ $ \depth u tree -> (depth, u, if depth <= depthLimit then tree else fail)
+
+nbs :: (Solver solver) => Int -> Transformer () Int solver a
+nbs nodeLimit = makeT () 0 id id id $ \u nodes tree -> (u, nodes + 1, if nodes <= nodeLimit then tree else fail)
+
+rand :: (Solver solver) => Int -> Transformer () [Bool] solver a
+rand seed = makeT
+  ()
+  (randoms $ mkStdGen seed)
+  id
+  id
+  id
+  $ \u coins tree -> (u, tail coins, if head coins then flipT tree else tree)
+
+lds :: (Solver solver) => Int -> Transformer Int () solver a
+lds discrepancyLimit = makeT 0 () id id succ $ \disc u tree -> (disc, u, if disc <= discrepancyLimit then tree else fail)

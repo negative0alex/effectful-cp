@@ -18,65 +18,59 @@ import Effects.CPSolve
 import Effects.Core
 import Effects.NonDet
 import Effects.Solver
-import Effects.Transformer
 import FD.OvertonFD
+import Handlers (flipT)
 import Language.Haskell.TH
 import Queens ((/\))
 import Queues
 import Solver (Solver (..))
 import Staging.Handlers (rec2)
+import System.Random
 import Prelude hiding (fail)
-
+import Eval (SearchTree)
 
 showCode :: Code Q a -> IO ()
-showCode code = do expr <- runQ (unTypeCode (code))
-                   putStrLn (pprint expr)
+showCode code = do
+  expr <- runQ (unTypeCode (code))
+  putStrLn (pprint expr)
 
 codeCurry :: (Rep a -> Rep b) -> Rep (a -> b)
 codeCurry f = [||\a -> $$(f [||a||])||]
 
 type Rep a = CodeQ a
 
-type SearchTree solver a = Free (CPSolve solver :+: NonDet :+: SolverE solver) a
-
-newtype StateTransform state solver = ST (Rep state -> Rep (Free (SolverE solver) state))
-
-unST :: StateTransform state solver -> Rep state -> Rep (Free (SolverE solver) state)
-unST (ST f) = f
+newtype StateTransform state solver = ST {unST :: (Rep state -> Rep (Free (SolverE solver) state))}
 
 newtype NextTransform ts es solver a
   = NT
-      ( Rep ts ->
-        Rep es ->
-        Rep (SearchTree solver a) ->
-        (Rep ts, Rep es, Rep (SearchTree solver a))
-      )
-
-unNT :: NextTransform ts es solver a -> Rep ts -> Rep es -> Rep (SearchTree solver a) -> 
-  (Rep ts, Rep es, Rep (SearchTree solver a))
-unNT (NT f) = f
+  { unNT ::
+      Rep ts ->
+      Rep es ->
+      Rep (SearchTree solver a) ->
+      (Rep ts, Rep es, Rep (SearchTree solver a))
+  }
 
 idState :: (Solver solver) => StateTransform state solver
 idState = ST $ \s -> [||pure $$s||]
 
 data (Solver solver) => SearchTransformer ts es solver a = SearchTransformer
-  { tsInit :: Rep ts,
-    esInit :: Rep es,
-    leftTs :: StateTransform ts solver,
-    rightTs :: StateTransform ts solver,
-    solEs :: StateTransform es solver,
-    nextState :: NextTransform ts es solver a
+  { tsInit :: Rep ts
+  , esInit :: Rep es
+  , leftTs :: StateTransform ts solver
+  , rightTs :: StateTransform ts solver
+  , solEs :: StateTransform es solver
+  , nextState :: NextTransform ts es solver a
   }
 
 dbsTrans :: (Solver solver) => Int -> SearchTransformer Int () solver a
 dbsTrans depthLimit =
   SearchTransformer
-    { tsInit = [||0||],
-      esInit = [||()||],
-      solEs = idState,
-      leftTs = ST $ \ts -> [||pure $ $$ts + 1||],
-      rightTs = ST $ \ts -> [||pure $ $$ts + 1||],
-      nextState = NT $ \ts es model -> (ts, es, [||if $$ts <= depthLimit then $$model else fail||])
+    { tsInit = [||0||]
+    , esInit = [||()||]
+    , solEs = idState
+    , leftTs = ST $ \ts -> [||pure $ $$ts + 1||]
+    , rightTs = ST $ \ts -> [||pure $ $$ts + 1||]
+    , nextState = NT $ \ts es model -> (ts, es, [||if $$ts <= depthLimit then $$model else fail||])
     }
 
 -- branch and bound scaffolding
@@ -94,30 +88,27 @@ bbTrans ::
   SearchTransformer Int (BBEvalState solver a) solver a
 bbTrans newBound =
   SearchTransformer
-    { tsInit = [||0||],
-      esInit = [||BBP 0 id||],
-      solEs = ST $ \es ->
-        [||let (BBP v _) = $$es in (solve $$newBound) >>= \b' -> pure $ BBP (v + 1) b'||],
-      leftTs = idState,
-      rightTs = idState,
-      nextState = NT @Int @(BBEvalState solver a) @solver $ \ts es tree ->
-        -- [||
-        -- let (BBP nv bound) = $$es
-        --     v = $$ts
-        --  in if nv > v
-        --       then do
-        --         let tree' = bound ($$tree)
-        --          in (nv, $$es, tree')
-        --       else
-        --         (v, $$es, $$tree)
-        -- ||]
-        ( [|| let (BBP nv _) = $$es
-                  v = $$ts in if nv > v then nv else v ||]
+    { tsInit = [||0||]
+    , esInit = [||BBP 0 id||]
+    , solEs = ST $ \es ->
+        [||let (BBP v _) = $$es in (solve $$newBound) >>= \b' -> pure $ BBP (v + 1) b'||]
+    , leftTs = idState
+    , rightTs = idState
+    , nextState = NT @Int @(BBEvalState solver a) @solver $ \ts es tree ->
+        ( [||
+          let (BBP nv _) = $$es
+              v = $$ts
+           in if nv > v then nv else v
+          ||]
         , es
-        , [|| let (BBP nv bound) = $$es
-                  v = $$ts in if nv > v 
-                    then bound($$tree) 
-                    else $$tree ||])
+        , [||
+          let (BBP nv bound) = $$es
+              v = $$ts
+           in if nv > v
+                then bound ($$tree)
+                else $$tree
+          ||]
+        )
     }
 
 newBound :: forall a. NewBound OvertonFD a
@@ -133,14 +124,44 @@ newBound =
 bb :: SearchTransformer Int (BBEvalState OvertonFD a) OvertonFD a
 bb = bbTrans newBound
 
+ldsTrans :: (Solver solver) => Int -> SearchTransformer Int () solver a
+ldsTrans discLimit =
+  SearchTransformer
+    { tsInit = [||0||]
+    , esInit = [||()||]
+    , solEs = idState
+    , leftTs = idState
+    , rightTs = ST $ \disc -> [||pure $ $$disc + 1||]
+    , nextState = NT $ \disc u tree ->
+        ( disc
+        , u
+        , [||if $$disc <= discLimit then $$tree else fail||]
+        )
+    }
+
+randTrans :: (Solver solver) => Int -> SearchTransformer () [Bool] solver a
+randTrans seed =
+  SearchTransformer
+    { tsInit = [||()||]
+    , esInit = [||randoms $ mkStdGen seed||]
+    , solEs = idState
+    , leftTs = idState
+    , rightTs = idState
+    , nextState = NT $ \u coins tree ->
+        ( u
+        , [||tail $$coins||]
+        , [||let tree' = $$tree in if head $$coins then flipT tree' else tree'||]
+        )
+    }
+
 stage ::
-  forall q ts es a.
-  ( Queue q,
-    Elem q ~ (Label OvertonFD, ts, SearchTree OvertonFD a)
+  forall solver q ts es a.
+  ( Solver solver
+  , Queue q
+  , Elem q ~ (Label solver, ts, SearchTree solver a)
   ) =>
-  SearchTransformer ts es OvertonFD a ->
-  Code Q
-    (q -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
+  SearchTransformer ts es solver a ->
+  Code Q (q -> SearchTree solver a -> Free (SolverE solver) [a])
 stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
   rec2
     ( \(go, continue) ->
@@ -156,13 +177,13 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
             $$continue es (pushQ (now, tsL, l) $ pushQ (now, tsR, r) q)
           Fail -> $$continue es q
           (Add c k) -> do
-            success <- solve @OvertonFD $ addCons c
+            success <- solve $ addCons c
             if success then $$go ts es q k else $$continue es q
           (NewVar k) -> do
-            var <- solve @OvertonFD newvar
+            var <- solve newvar
             $$go ts es q (k var)
           (Dynamic k) -> do
-            term <- solve @OvertonFD k
+            term <- solve k
             $$go ts es q term
           (Other2 op) -> Free $ (\t -> $$go ts es q t) <$> op
         ||]
@@ -173,10 +194,10 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
           if nullQ q
             then pure []
             else
-              let ((label, ts, tree), q') = popQ q in 
-              $$(
-              let (ts', es', tree') = unNT nextState [||ts||] [||es||] [||tree||] in
-              [||$$go $$ts' $$es' q' ( (solve $ goto label) >> $$tree')||])
+              let ((label, ts, tree), q') = popQ q
+               in $$( let (ts', es', tree') = unNT nextState [||ts||] [||es||] [||tree||]
+                       in [||$$go $$ts' $$es' q' ((solve $ goto label) >> $$tree')||]
+                    )
         ||]
     )
     (\(go, _) -> [||$$go $$tsInit $$esInit||])
@@ -184,38 +205,70 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
 bnbStaged :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
 bnbStaged = stage bb
 
-composeTrans :: (Solver solver) => SearchTransformer ts1 es1 solver a -> 
-                SearchTransformer ts2 es2 solver a -> 
-                SearchTransformer (ts1, ts2) (es1, es2) solver a
-composeTrans t1 t2 = 
-  SearchTransformer {
-    tsInit = [|| ($$(tsInit t1), $$(tsInit t2)) ||] 
-  , esInit = [|| ($$(esInit t1), $$(esInit t2)) ||] 
-  , leftTs = ST $ \ts -> 
-                    let ts1 = [|| fst $$ts ||]
-                        ts2 = [|| snd $$ts ||]
-                      in [|| $$(unST (leftTs t1) $ ts1) >>= 
-                        \ts1' -> $$(unST (leftTs t2) $ ts2) >>= 
-                        \ts2' -> pure (ts1', ts2') ||]
-  , rightTs = ST $ \ts -> 
-                    let ts1 = [|| fst $$ts ||]
-                        ts2 = [|| snd $$ts ||]
-                      in [|| $$(unST (rightTs t1) $ ts1) >>= 
-                        \ts1' -> $$(unST (rightTs t2) $ ts2) >>= 
-                        \ts2' -> pure (ts1', ts2') ||] 
-  , solEs = ST $ \es -> 
-                    let es1 = [|| fst $$es ||]
-                        es2 = [|| snd $$es ||]
-                      in [|| $$(unST (solEs t1) $ es1) >>= 
-                        \es1' -> $$(unST (solEs t2) $ es2) >>= 
-                        \es2' -> pure (es1', es2') ||]
-  , nextState = NT $ \ts es tree -> 
-                              let ts1 = [|| fst $$ts ||]
-                                  ts2 = [|| snd $$ts ||]
-                                  es1 = [|| fst $$es ||]
-                                  es2 = [|| snd $$es ||]
-                                  (ts1', es1', tree') = unNT (nextState t1) ts1 es1 tree
-                                  (ts2', es2', tree'') = unNT (nextState t2) ts2 es2 tree'
-                                in 
-                                  ([|| ($$ts1', $$ts2') ||], [|| ($$es1', $$es2') ||], tree'')
-  }
+composeTrans ::
+  (Solver solver) =>
+  SearchTransformer ts1 es1 solver a ->
+  SearchTransformer ts2 es2 solver a ->
+  SearchTransformer (ts1, ts2) (es1, es2) solver a
+composeTrans t1 t2 =
+  SearchTransformer
+    { tsInit = [||($$(tsInit t1), $$(tsInit t2))||]
+    , esInit = [||($$(esInit t1), $$(esInit t2))||]
+    , leftTs = ST $ \ts ->
+        let ts1 = [||fst $$ts||]
+            ts2 = [||snd $$ts||]
+         in [||
+            $$(unST (leftTs t1) $ ts1)
+              >>= \ts1' ->
+                $$(unST (leftTs t2) $ ts2)
+                  >>= \ts2' -> pure (ts1', ts2')
+            ||]
+    , rightTs = ST $ \ts ->
+        let ts1 = [||fst $$ts||]
+            ts2 = [||snd $$ts||]
+         in [||
+            $$(unST (rightTs t1) $ ts1)
+              >>= \ts1' ->
+                $$(unST (rightTs t2) $ ts2)
+                  >>= \ts2' -> pure (ts1', ts2')
+            ||]
+    , solEs = ST $ \es ->
+        let es1 = [||fst $$es||]
+            es2 = [||snd $$es||]
+         in [||
+            $$(unST (solEs t1) $ es1)
+              >>= \es1' ->
+                $$(unST (solEs t2) $ es2)
+                  >>= \es2' -> pure (es1', es2')
+            ||]
+    , nextState = NT $ \ts es tree ->
+        let ts1 = [||fst $$ts||]
+            ts2 = [||snd $$ts||]
+            es1 = [||fst $$es||]
+            es2 = [||snd $$es||]
+            (ts1', es1', tree') = unNT (nextState t1) ts1 es1 tree
+            (ts2', es2', tree'') = unNT (nextState t2) ts2 es2 tree'
+         in ([||($$ts1', $$ts2')||], [||($$es1', $$es2')||], tree'')
+    }
+
+(%&) ::
+  (Solver solver) =>
+  SearchTransformer ts1 es1 solver a ->
+  SearchTransformer ts2 es2 solver a ->
+  SearchTransformer (ts1, ts2) (es1, es2) solver a
+(%&) = composeTrans
+infixr 6 %&
+
+---------------------------------------------------
+
+bbBenchTrans :: Int -> Int -> SearchTransformer (((), (Int, Int))) (([Bool], ((), BBEvalState OvertonFD a))) OvertonFD a
+bbBenchTrans seed discrepancy = (randTrans seed) %& (ldsTrans discrepancy) %& bb
+
+bbBench ::
+  Int -> Int -> Code
+    Q
+    ( [(Label OvertonFD, ((), (Int, Int)), SearchTree OvertonFD a)] ->
+      SearchTree OvertonFD a ->
+      Free (SolverE OvertonFD) [a]
+    )
+bbBench seed discrepancy = stage (bbBenchTrans seed discrepancy)

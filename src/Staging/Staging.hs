@@ -20,7 +20,7 @@ import Staging.Optimisation
 import Language.Haskell.TH
 import qualified Staging.Handlers as Staging
 import Queens (nqueens)
-import Staging.Effectful (bnbStaged)
+import Staging.Effectful (bnbStaged, bbBench)
 import FD.OvertonFD
 import Effects.Solver
 import BranchAndBound (gmodel)
@@ -130,4 +130,10 @@ bb = $$bnbStaged []
 
 testBb :: Int -> [Int]
 testBb n = run . runSolver $ bb (gmodel n)
+
+bbBenchStaged :: Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a -> Free (SolverE OvertonFD) [a]
+bbBenchStaged = $$(bbBench 2501 50) []
+
+testBbBench :: Int -> [Int]
+testBbBench n = run . runSolver $ bbBenchStaged (gmodel n)
 

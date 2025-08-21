@@ -59,6 +59,8 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  Handlers
+                    , Transformers
+                    , Eval
                     , Solver
                     , Queens
                     , Queens2
@@ -70,6 +72,8 @@ library
                     , Effects.Core
                     , Effects.State
                     , Effects.Solver
+                    , Effects.Algebra
+                    , Effects.Writer
                     , Staging.Handlers
                     , Staging.Staging
                     , Staging.Optimisation

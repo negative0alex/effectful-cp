@@ -28,3 +28,4 @@ benchmark*
 flamegraphs
 memory-profiling
 saved-benchmarks
+fourmolu.yaml
