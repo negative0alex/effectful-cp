@@ -53,6 +53,8 @@ main = do
         "vbe_o" -> Staging.veryBigOptimised
         "bb_h" -> [BranchAndBound.bbBench 70]
         "bb_s" -> [Staging.testBbBench 70]
+        "ev1" -> [BranchAndBound.bbSolve $ BranchAndBound.gmodel 60]
+        "ev2" -> [BranchAndBound.bbSolve2 $ BranchAndBound.gmodel 60]
         _ -> []
   print $ sols
   

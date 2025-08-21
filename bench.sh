@@ -3,8 +3,8 @@
 cabal build
 
 hyperfine --export-markdown benchmark.md \
-    'cabal run effectful-cp -- "bb_h"' \
-    'cabal run effectful-cp -- "bb_s"' \
+    'cabal run effectful-cp -- "ev1"' \
+    'cabal run effectful-cp -- "ev2"' \
     # 'cabal run effectful-cp -- "handlers_it"' \
     # 'cabal run effectful-cp -- "handlers_it2"' \
     # 'cabal run effectful-cp -- "example_1"' \

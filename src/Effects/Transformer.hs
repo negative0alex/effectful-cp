@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
-module Effects.Transformer(TransformerE(..), leftT, rightT, nextT, pattern LeftT, pattern RightT, pattern NextT, pattern InitT, initT, pattern SolT, solT) where 
+module Effects.Transformer(TransformerE(..), leftT, rightT, nextT, pattern LeftT, pattern RightT, pattern NextT, pattern InitT, initT, pattern SolT, solT, leftS, rightS) where 
 import Control.Monad.Free
 import Effects.Core
 
@@ -35,10 +35,14 @@ pattern LeftT ts k <- (project -> Just (LeftT' ts k))
 leftT :: forall ts es el a sig. (TransformerE ts es el `Sub` sig) => ts -> (ts -> Free sig a) -> Free sig a
 leftT ts k = inject (LeftT' @ts @(Free sig a) @es @el ts k)
 
+leftS ts = leftT ts pure
+
 pattern RightT ts k <- (project -> Just (RightT' ts k))
 
 rightT :: forall ts es el a sig. (TransformerE ts es el `Sub` sig) => ts -> (ts -> Free sig a) -> Free sig a
 rightT ts k = inject (RightT' @ts @(Free sig a) @es @el ts k)
+
+rightS ts = rightT ts pure
 
 pattern NextT el ts es k <- (project -> Just (NextT' el ts es k))
 
