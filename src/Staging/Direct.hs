@@ -81,12 +81,12 @@ type NewBound solver a = Rep (solver (Bound solver a))
 
 data BBEvalState solver a = BBP Int (Bound solver a)
 
-bbTrans ::
+bbNB ::
   forall a solver.
   (Solver solver) =>
   NewBound solver a ->
   SearchTransformer Int (BBEvalState solver a) solver a
-bbTrans newBound =
+bbNB newBound =
   SearchTransformer
     { tsInit = [||0||]
     , esInit = [||BBP 0 id||]
@@ -121,11 +121,11 @@ newBound =
     return ((\tree -> obj @< val /\ tree))
   ||]
 
-bb :: SearchTransformer Int (BBEvalState OvertonFD a) OvertonFD a
-bb = bbTrans newBound
+bbS :: SearchTransformer Int (BBEvalState OvertonFD a) OvertonFD a
+bbS = bbNB newBound
 
-ldsTrans :: (Solver solver) => Int -> SearchTransformer Int () solver a
-ldsTrans discLimit =
+ldsS :: (Solver solver) => Int -> SearchTransformer Int () solver a
+ldsS discLimit =
   SearchTransformer
     { tsInit = [||0||]
     , esInit = [||()||]
@@ -139,8 +139,8 @@ ldsTrans discLimit =
         )
     }
 
-randTrans :: (Solver solver) => Int -> SearchTransformer () [Bool] solver a
-randTrans seed =
+randS :: (Solver solver) => Int -> SearchTransformer () [Bool] solver a
+randS seed =
   SearchTransformer
     { tsInit = [||()||]
     , esInit = [||randoms $ mkStdGen seed||]
@@ -202,9 +202,6 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
     )
     (\(go, _) -> [||$$go $$tsInit $$esInit||])
 
-bnbStaged :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
-bnbStaged = stage bb
-
 composeTrans ::
   (Solver solver) =>
   SearchTransformer ts1 es1 solver a ->
@@ -261,14 +258,17 @@ infixr 6 %&
 
 ---------------------------------------------------
 
-bbBenchTrans :: Int -> Int -> SearchTransformer (((), (Int, Int))) (([Bool], ((), BBEvalState OvertonFD a))) OvertonFD a
-bbBenchTrans seed discrepancy = (randTrans seed) %& (ldsTrans discrepancy) %& bb
+bbLdsRandS :: Int -> Int -> SearchTransformer (((), (Int, Int))) (([Bool], ((), BBEvalState OvertonFD a))) OvertonFD a
+bbLdsRandS seed discrepancy = (randS seed) %& (ldsS discrepancy) %& bbS
 
-bbBench ::
+bbLdsRandCode ::
   Int -> Int -> Code
     Q
     ( [(Label OvertonFD, ((), (Int, Int)), SearchTree OvertonFD a)] ->
       SearchTree OvertonFD a ->
       Free (SolverE OvertonFD) [a]
     )
-bbBench seed discrepancy = stage (bbBenchTrans seed discrepancy)
+bbLdsRandCode seed discrepancy = stage (bbLdsRandS seed discrepancy)
+
+justBBCode :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
+justBBCode = stage bbS

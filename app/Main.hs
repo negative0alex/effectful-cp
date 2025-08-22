@@ -6,17 +6,23 @@
 
 module Main where
 
-import qualified BranchAndBound
-import qualified Experiments.CombinedHandlers
-import qualified Handlers
-import qualified Queens
-import qualified Queens2
-import Staging.Staging as Staging
+import Staging.Toplevel as Staging
 import System.Environment (getArgs)
+import BranchAndBound (gmodel)
+import BranchAndBound (bb)
+import Transformers
+import BranchAndBound (newBound)
+import Eval
+
+
+bbLdsRand = it . (bb newBound) . (lds 5000) . (rand 123)
 
 main :: IO ()
 main = do
   arg <- head <$> getArgs
-  let sols = case arg of
+  let graph = gmodel 50
+      sols = case arg of
+        "bb_lds_rand_staged" -> dfsS bbLdsRandStaged graph
+        "bb_lds_rand" -> dfs bbLdsRand graph
         _ -> []
   print $ sols

@@ -36,6 +36,3 @@ solve a = solve' $ pure <$> a
 runSolver :: Solver solver => Free (SolverE solver) a -> solver a 
 runSolver (Pure a) = pure a
 runSolver (Solver a) = a >>= runSolver
-
-solveConstraints :: Solver solver => Free (SolverE solver) a -> a 
-solveConstraints = run . runSolver

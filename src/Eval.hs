@@ -14,7 +14,7 @@ import Effects.Algebra
 import Effects.CPSolve (CPSolve (..))
 import Effects.Core ((:+:) (..))
 import Effects.NonDet (NonDet (..), pattern (:|:))
-import Effects.Solver (SolverE, solve)
+import Effects.Solver (SolverE, runSolver, solve)
 import Effects.Transformer (TransformerE (..), initT, leftS, nextT, rightS, solT)
 import FD.OvertonFD (OvertonFD)
 import Queues (Queue (..))
@@ -23,7 +23,14 @@ import Prelude hiding (fail)
 
 type SearchTree solver a = Free (CPSolve solver :+: NonDet :+: SolverE solver) a
 type TransformerTree ts es solver a b = Free (TransformerE ts es (SearchTree solver a) :+: SolverE solver) b
-type CSP a = Free (CPSolve OvertonFD :+: NonDet :+: SolverE OvertonFD) a
+type CSP a = SearchTree OvertonFD a
+
+dfs ::
+  (Solver solver) =>
+  (TransformerTree ts es solver a [a] -> Free (SolverE solver) [a]) ->
+  SearchTree solver a ->
+  [a]
+dfs trans model = run . runSolver . trans . (eval []) $ model
 
 eval ::
   forall solver q a es ts.
@@ -74,7 +81,6 @@ eval queue model = initT (\ts es -> go model queue ts es)
               solve $ goto now
               nextT tree ts es (\tree' ts' es' -> go tree' q' ts' es')
 
-
 -- evalQ ::
 --   forall solver q a es ts.
 --   (Solver solver, Queue q, Elem q ~ (Label solver, ts, SearchTree solver a)) =>
@@ -113,7 +119,6 @@ eval queue model = initT (\ts es -> go model queue ts es)
 --          in do
 --               solve $ goto now
 --               nextT tree ts es (\tree' ts' es' -> go tree' q' ts' es')
-
 
 -- evalIndep ::
 --   forall solver a sig.
