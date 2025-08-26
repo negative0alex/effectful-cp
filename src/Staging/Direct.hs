@@ -36,7 +36,7 @@ showCode code = do
 
 type Rep a = CodeQ a
 
-newtype StateTransform state solver = ST {unST :: (Rep state -> Rep (Free (SolverE solver) state))}
+newtype StateTransform state solver = ST {unST :: (Rep state -> Rep (solver state))}
 
 newtype NextTransform ts es solver a
   = NT
@@ -88,10 +88,11 @@ bbNB newBound =
     { tsInit = [||0||]
     , esInit = [||BBP 0 id||]
     , solEs = ST $ \es ->
-        [||let (BBP v _) = $$es in (solve $$newBound) >>= \b' -> pure $ BBP (v + 1) b'||]
+        [||let (BBP v _) = $$es in ($$newBound) >>= \b' -> pure $ BBP (v + 1) b'||]
     , leftTs = idState
     , rightTs = idState
-    , nextState = NT @Int @(BBEvalState solver a) @solver $ \ts es tree ->
+    , nextState = 
+      NT @Int @(BBEvalState solver a) @solver $ \ts es tree ->
         ( [||
           let (BBP nv _) = $$es
               v = $$ts
@@ -158,7 +159,7 @@ stage ::
   , Elem q ~ (Label solver, ts, SearchTree solver a)
   ) =>
   SearchTransformer ts es solver a ->
-  Code Q (q -> SearchTree solver a -> Free (SolverE solver) [a])
+  Code Q (q -> SearchTree solver a -> solver [a])
 stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
   rec2
     ( \(go, continue) ->
@@ -168,21 +169,21 @@ stage (SearchTransformer tsInit esInit leftTs rightTs solEs nextState) =
             es' <- $$(unST solEs $ [||es||])
             (a :) <$> ($$continue es' q)
           l :|: r -> do
-            now <- solve mark
+            now <- mark
             tsL <- $$(unST leftTs $ [||ts||])
             tsR <- $$(unST rightTs $ [||ts||])
             $$continue es (pushQ (now, tsL, l) $ pushQ (now, tsR, r) q)
           Fail -> $$continue es q
           (Add c k) -> do
-            success <- solve $ addCons c
+            success <- addCons c
             if success then $$go ts es q k else $$continue es q
           (NewVar k) -> do
-            var <- solve newvar
+            var <- newvar
             $$go ts es q (k var)
           (Dynamic k) -> do
-            term <- solve k
+            term <- k
             $$go ts es q term
-          (Other2 op) -> Free $ (\t -> $$go ts es q t) <$> op
+          (Solver s) -> s >>= \term -> $$go ts es q term
         ||]
     )
     ( \(go, _) ->
@@ -263,9 +264,9 @@ bbLdsRandCode ::
     Q
     ( [(Label OvertonFD, ((), (Int, Int)), SearchTree OvertonFD a)] ->
       SearchTree OvertonFD a ->
-      Free (SolverE OvertonFD) [a]
+      OvertonFD [a]
     )
 bbLdsRandCode seed discrepancy = stage (bbLdsRandS seed discrepancy)
 
-justBBCode :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a])
+justBBCode :: Code Q ([(Label OvertonFD, Int, SearchTree OvertonFD a)] -> SearchTree OvertonFD a -> OvertonFD [a])
 justBBCode = stage bbS

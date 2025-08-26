@@ -20,9 +20,10 @@ bbLdsRand = it . (bb newBound) . (lds 5000) . (rand 123)
 main :: IO ()
 main = do
   arg <- head <$> getArgs
-  let graph = gmodel 50
+  let graph = gmodel 60
       sols = case arg of
         "bb_lds_rand_staged" -> dfsS bbLdsRandStaged graph
         "bb_lds_rand" -> dfs bbLdsRand graph
+        "bb_lds_rand_opt" -> dfsS bbLdsRandOptimised graph
         _ -> []
   print $ sols

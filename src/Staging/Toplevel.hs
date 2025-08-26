@@ -12,17 +12,23 @@ import Prelude hiding (fail)
 import Staging.Direct
 import Eval (SearchTree)
 import FD.OvertonFD (OvertonFD)
-import Control.Monad.Free (Free)
-import Effects.Solver (SolverE, runSolver)
 import Solver (Solver, run)
+import qualified Staging.Optimised as Opt
 
-dfsS :: (Solver solver) => (SearchTree solver a -> Free (SolverE solver) [a]) -> SearchTree solver a -> [a]
-dfsS search model = run . runSolver . search $ model
 
-bbLdsRandStaged :: SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a] 
+dfsS :: (Solver solver) => (SearchTree solver a -> solver [a]) -> SearchTree solver a -> [a]
+dfsS search = run . search 
+
+bbLdsRandStaged :: SearchTree OvertonFD a -> OvertonFD [a] 
 -- seed discrepancy
 bbLdsRandStaged = $$(bbLdsRandCode 123 5000) []
 
-justBBStaged :: SearchTree OvertonFD a -> Free (SolverE OvertonFD) [a]  
+justBBStaged :: SearchTree OvertonFD a -> OvertonFD [a]  
 justBBStaged = $$justBBCode []
+
+justBBOptimised :: SearchTree OvertonFD a -> OvertonFD [a]
+justBBOptimised = $$(Opt.justBBCode) []
+
+bbLdsRandOptimised :: SearchTree OvertonFD a -> OvertonFD [a]
+bbLdsRandOptimised = $$(Opt.bbLdsRandCode 123 5000) []
 
