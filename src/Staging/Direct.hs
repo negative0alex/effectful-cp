@@ -34,9 +34,6 @@ showCode code = do
   expr <- runQ (unTypeCode (code))
   putStrLn (pprint expr)
 
-codeCurry :: (Rep a -> Rep b) -> Rep (a -> b)
-codeCurry f = [||\a -> $$(f [||a||])||]
-
 type Rep a = CodeQ a
 
 newtype StateTransform state solver = ST {unST :: (Rep state -> Rep (Free (SolverE solver) state))}
