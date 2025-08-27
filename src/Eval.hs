@@ -13,7 +13,7 @@ import Control.Monad.Free (Free (..))
 import Effects.Algebra
 import Effects.CPSolve (CPSolve (..))
 import Effects.Core ((:+:) (..))
-import Effects.NonDet (NonDet (..), pattern (:|:))
+import Effects.NonDet (NonDet (..))
 import Effects.Solver (SolverE, runSolver, solve)
 import Effects.Transformer (TransformerE (..), initT, leftS, nextT, rightS, solT)
 import FD.OvertonFD (OvertonFD)
@@ -41,8 +41,7 @@ eval ::
 eval model queue = initT (\ts es -> go model queue ts es)
  where
   go :: SearchTree solver a -> q -> ts -> es -> TransformerTree ts es solver a [a]
-  continue :: q -> es -> TransformerTree ts es solver a [a]
-  go = handlePara (liftPara algCP <|| algNonDet <|| liftPara conCSP) genCSP
+  go = handlePara (liftPara algCP <| algNonDet <| liftPara conCSP) genCSP
 
   genCSP a q _ es = solT es (\es' -> (a :) <$> continue q es')
 
@@ -56,12 +55,6 @@ eval model queue = initT (\ts es -> go model queue ts es)
     k <- solve d
     k q ts es
 
-  algNonDet ::
-    NonDet (SearchTree solver a, q -> ts -> es -> TransformerTree ts es solver a [a]) ->
-    q ->
-    ts ->
-    es ->
-    TransformerTree ts es solver a [a]
   algNonDet (Try' (l, _) (r, _)) q ts es = do
     now <- solve mark
     ls <- leftS ts
@@ -72,6 +65,7 @@ eval model queue = initT (\ts es -> go model queue ts es)
 
   conCSP op q ts es = Free . Inr $ (\f -> f q ts es) <$> op
 
+  continue :: q -> es -> TransformerTree ts es solver a [a]
   continue q es
     | nullQ q = pure []
     | otherwise =
