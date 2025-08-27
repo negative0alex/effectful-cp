@@ -30,15 +30,15 @@ dfs ::
   (TransformerTree ts es solver a [a] -> Free (SolverE solver) [a]) ->
   SearchTree solver a ->
   [a]
-dfs trans model = run . runSolver . trans . (eval []) $ model
+dfs trans model = run . runSolver . trans . (flip eval []) $ model
 
 eval ::
   forall solver q a es ts.
   (Solver solver, Queue q, Elem q ~ (Label solver, ts, SearchTree solver a)) =>
-  q ->
   SearchTree solver a ->
+  q ->
   TransformerTree ts es solver a [a]
-eval queue model = initT (\ts es -> go model queue ts es)
+eval model queue = initT (\ts es -> go model queue ts es)
  where
   go :: SearchTree solver a -> q -> ts -> es -> TransformerTree ts es solver a [a]
   continue :: q -> es -> TransformerTree ts es solver a [a]
@@ -57,19 +57,18 @@ eval queue model = initT (\ts es -> go model queue ts es)
     k q ts es
 
   algNonDet ::
-    SearchTree solver a ->
-    NonDet (q -> ts -> es -> TransformerTree ts es solver a [a]) ->
+    NonDet (SearchTree solver a, q -> ts -> es -> TransformerTree ts es solver a [a]) ->
     q ->
     ts ->
     es ->
     TransformerTree ts es solver a [a]
-  algNonDet (l :|: r) (Try' _ _) q ts es = do
+  algNonDet (Try' (l, _) (r, _)) q ts es = do
     now <- solve mark
     ls <- leftS ts
     rs <- rightS ts
     let q' = pushQ (now, ls, l) $ pushQ (now, rs, r) $ q
     continue q' es
-  algNonDet _ (Fail') q _ es = continue q es
+  algNonDet (Fail') q _ es = continue q es
 
   conCSP op q ts es = Free . Inr $ (\f -> f q ts es) <$> op
 

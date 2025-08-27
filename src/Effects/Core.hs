@@ -11,7 +11,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PolyKinds #-}
-module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, wrapF, wrapFree, liftR, pattern Other2)
+module Effects.Core (inject, project, runEffects, pattern Other, Sub(..), (:+:)(..), Void, getL, putL, wrapF, wrapFree, liftR, pattern Other2, getLUnsafe, getRUnsafe)
 where
 import Control.Monad.Free (Free(..), MonadFree (wrap))
 
@@ -91,6 +91,15 @@ getL _ = Nothing
 
 putL :: sig1 (Free (sig1 :+: sig2) a) -> Free (sig1 :+: sig2) a
 putL = Free . Inl
+
+getLUnsafe :: (Functor f) => Free (f :+: g) a -> Free f a
+getLUnsafe (Pure a) = pure a 
+getLUnsafe (Free op) = case op of Inl f -> wrap $ getLUnsafe <$> f
+
+
+getRUnsafe :: (Functor g) => Free (f :+: g) a -> Free g a
+getRUnsafe (Pure a) = pure a 
+getRUnsafe (Free op) = case op of Inr g -> wrap $ getRUnsafe <$> g
 
 data Void cnt deriving (Functor, Foldable, Traversable)
 

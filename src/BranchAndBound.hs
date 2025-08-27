@@ -41,7 +41,7 @@ bb newBound = makeTEff
   $ \v es@(BBP nv bound) tree -> if nv > v then (nv, es, bound tree) else (v, es, tree)
 
 bbSolve :: CSP a -> [a]
-bbSolve model = run . runSolver . it . (bb newBound) . (eval []) $ model
+bbSolve = dfs $ it . (bb newBound)
 
 newBound :: forall a. NewBound OvertonFD a
 newBound = do
@@ -51,7 +51,7 @@ newBound = do
   return ((\tree -> obj @< val /\ tree) :: Bound OvertonFD a)
 
 bbBench :: Int -> [Int]
-bbBench n = run . runSolver . it . (bb newBound) . (lds 500) . (rand 2501) . (eval []) $ (gmodel n)
+bbBench n = dfs (it . (bb newBound) . (lds 500) . (rand 2501)) (gmodel n)
 
 ----------------------------------------------------------
 

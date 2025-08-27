@@ -7,30 +7,28 @@
 {-# LANGUAGE InstanceSigs #-}
 module Effects.Algebra where
 import Control.Monad.Free (Free(..))
-import Effects.Core ((:+:) (..))
+import Effects.Core ((:+:) (..), getLUnsafe, getRUnsafe)
 
 handle :: Functor f => (f b -> b) -> (a -> b) -> Free f a -> b
 handle _alg gen (Pure x)  = gen x 
-handle  alg gen (Free op) = alg ((handle alg gen) <$> op) 
+handle  alg gen (Free op) = alg $ (handle alg gen) <$> op
 
-handlePara :: Functor f => (Free f a -> f b -> b) -> (a -> b) -> Free f a -> b
+handlePara :: Functor f => (f (Free f a, b) -> b) -> (a -> b) -> Free f a -> b
 handlePara _alg gen (Pure x) = gen x 
-handlePara alg gen (Free op) = alg (Free op) (handlePara alg gen <$> op)
-
--- hdl :: forall g a. Free (F :+: g) a -> H1 (Free g (G1 a))
+handlePara alg gen (Free op) = alg $ (\fa -> (fa, handlePara alg gen fa)) <$> op
 
 (<|) :: (f b -> b) -> (g b -> b) -> ((f :+: g) b -> b)
 (<|) algF _algG (Inl s) = algF s 
 (<|) _algF algG (Inr s) = algG s
 infixr 6 <|
 
-(<||) :: (Free h a -> f b -> b) -> (Free h a -> g b -> b) -> (Free h a -> (f :+: g) b -> b)
-(<||) algF _algG tree (Inl s) = algF tree s
-(<||) _algF algG tree (Inr s) = algG tree s
+(<||) :: (Functor f, Functor g) => (f (Free h a, b) -> b) -> (g (Free h a, b) -> b) -> ((f :+: g) (Free h a, b) -> b)
+(<||) algF _algG (Inl s) = algF s
+(<||) _algF algG (Inr s) = algG s
 infixr 6 <||
 
-liftPara :: (b -> c) -> (a -> b -> c)
-liftPara f _ = f
+liftPara :: Functor f => (f b -> b) -> (f (c, b) -> b)
+liftPara alg = alg . (snd <$>)
 
 -- type Sigma = NonDet :+: State Int :+: Void -- global state 
 -- type SigmaLocal = State Int :+: NonDet :+: Void -- local state
