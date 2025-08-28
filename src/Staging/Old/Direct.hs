@@ -201,17 +201,11 @@ stagedVeryBigExample :: Code Q ([(((Int, ()), ()), Free (NonDet :+: Void) a)] ->
 stagedVeryBigExample = stage1 exampleVeryBigTrans
 -- ------------------------------------------
 
-
+type Mk1 a b = Code Q a -> Code Q b
 type Mk2 a b c = (Code Q a, Code Q b) -> Code Q c
+type Mk4 a b c d e = (Code Q a, Code Q b, Code Q c, Code Q d) -> Code Q e
 
 rec2 :: Mk2 a b a -> Mk2 a b b -> Mk2 a b c -> Code Q c
 rec2 mk1 mk2 mkk = [|| let f = $$(mk1 ([|| f ||], [|| g ||]))
                            g = $$(mk2 ([|| f ||], [|| g ||]))
                           in $$(mkk ([|| f ||], [|| g ||])) ||]
-
- 
-three :: Code Q Int 
-three = [|| 3 ||]
-
-two_plus_three :: Code Q Int 
-two_plus_three = [|| 2 + $$three ||]

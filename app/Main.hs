@@ -23,7 +23,9 @@ main = do
   let graph = gmodel 60
       sols = case arg of
         "bb_lds_rand_staged" -> dfsS bbLdsRandStaged graph
+        "bb_lds_rand_staged_old" -> dfsS bbLdsRandStagedOld graph
         "bb_lds_rand" -> dfs bbLdsRand graph
+        "bb_lds_rand_old" -> dfsO bbLdsRand graph
         "bb_lds_rand_opt" -> dfsS bbLdsRandOptimised graph
         _ -> []
   print $ sols
